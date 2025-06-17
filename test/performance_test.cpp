@@ -9,8 +9,8 @@
 #include <vector>
 
 #ifdef _WIN32
-#    include <psapi.h>
 #    include <windows.h>  // 该头文件一定要在psapi.h前
+#    include <psapi.h>
 #else
 #    include <sys/resource.h>
 #    include <sys/time.h>
@@ -63,7 +63,7 @@ TestData ccjson_deserialize(const JsonValue& json_value) {
 
     // 检查是否为对象类型
     if (!json_value.isObject()) {
-        throw JsonException("Expected JSON object");
+        throw JsonException("Expected JSON Object");
     }
 
     // 获取基本字段

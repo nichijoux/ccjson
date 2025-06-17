@@ -166,25 +166,32 @@ class JsonValue {
         }
     }
 
-    template <typename T>
+    template <
+        typename T,
+        std::enable_if_t<std::is_convertible_v<T, std::pair<const char*, JsonValue>>, int> = 0>
     JsonValue(std::initializer_list<T> init) {
-        if constexpr (std::is_convertible_v<T, std::pair<const char*, JsonValue>>) {
-            // 对象初始化
-            m_type         = JsonType::Object;
-            m_value.object = new JsonObject();
-            for (const auto& [key, value] : init) {
-                (*m_value.object)[key] = value;
-            }
-        } else {
-            // 数组初始化
-            m_type        = JsonType::Array;
-            m_value.array = new JsonArray();
-            m_value.array->reserve(init.size());
-            for (const auto& item : init) {
-                m_value.array->emplace_back(JsonValue(item));
-            }
+        // 对象初始化
+        m_type         = JsonType::Object;
+        m_value.object = new JsonObject();
+        for (const auto& item : init) {
+            auto pair                     = static_cast<std::pair<const char*, JsonValue>>(item);
+            (*m_value.object)[pair.first] = pair.second;
         }
     }
+
+    template <
+        typename T,
+        std::enable_if_t<!std::is_convertible_v<T, std::pair<const char*, JsonValue>>, int> = 0>
+    JsonValue(std::initializer_list<T> init) {
+        // 数组初始化
+        m_type        = JsonType::Array;
+        m_value.array = new JsonArray();
+        m_value.array->reserve(init.size());
+        for (const auto& item : init) {
+            m_value.array->emplace_back(JsonValue(item));
+        }
+    }
+
     // 拷贝构造函数
     JsonValue(const JsonValue& other);
 
@@ -240,24 +247,33 @@ class JsonValue {
     }
 
     // 模板数组赋值运算符
-    template <typename T>
+    template <
+        typename T,
+        std::enable_if_t<std::is_convertible_v<T, std::pair<const char*, JsonValue>>, int> = 0>
     JsonValue& operator=(std::initializer_list<T> init) {
+        // 释放之前的数据
         destroyValue();
-        if constexpr (std::is_convertible_v<T, std::pair<const char*, JsonValue>>) {
-            // 对象赋值
-            m_type         = JsonType::Object;
-            m_value.object = new JsonObject();
-            for (const auto& [k, v] : init) {
-                (*m_value.object)[k] = v;
-            }
-        } else {
-            // 数组赋值
-            m_type        = JsonType::Array;
-            m_value.array = new JsonArray();
-            m_value.array->reserve(init.size());
-            for (const auto& item : init) {
-                m_value.array->emplace_back(JsonValue(item));
-            }
+        // 对象赋值
+        m_type         = JsonType::Object;
+        m_value.object = new JsonObject();
+        for (const auto& [k, v] : init) {
+            (*m_value.object)[k] = v;
+        }
+        return *this;
+    }
+
+    template <
+        typename T,
+        std::enable_if_t<!std::is_convertible_v<T, std::pair<const char*, JsonValue>>, int> = 0>
+    JsonValue& operator=(std::initializer_list<T> init) {
+        // 释放之前的数据
+        destroyValue();
+        // 数组赋值
+        m_type        = JsonType::Array;
+        m_value.array = new JsonArray();
+        m_value.array->reserve(init.size());
+        for (const auto& item : init) {
+            m_value.array->emplace_back(JsonValue(item));
         }
         return *this;
     }
@@ -288,11 +304,11 @@ class JsonValue {
     }
 
     // 创建对象的静态方法
-    static JsonValue object() {
+    static JsonValue Object() {
         return JsonObject();
     }
 
-    static JsonValue array() {
+    static JsonValue Array() {
         return JsonArray();
     }
 
@@ -390,12 +406,12 @@ class JsonValue {
             return *this;
         } else if constexpr (std::is_same_v<T, JsonObject>) {
             if (!isObject()) {
-                throw std::runtime_error("Not an object");
+                throw std::runtime_error("Not an Object");
             }
             return *m_value.object;
         } else if constexpr (std::is_same_v<T, JsonArray>) {
             if (!isArray()) {
-                throw std::runtime_error("Not an array");
+                throw std::runtime_error("Not an Array");
             }
             return *m_value.array;
         } else if constexpr (std::is_arithmetic_v<T>) {
@@ -415,7 +431,7 @@ class JsonValue {
         } else if constexpr (is_vector<T>::value) {
             // 处理 std::vector<T> 类型
             if (!isArray()) {
-                throw JsonException("Not an array");
+                throw JsonException("Not an Array");
             }
             using ValueType = typename T::value_type;
             T result;
@@ -432,7 +448,7 @@ class JsonValue {
             return result;
         } else if constexpr (is_string_map<T>::value) {
             if (!isObject()) {
-                throw JsonException("Not a object");
+                throw JsonException("Not a Object");
             }
             using ValueType = typename T::mapped_type;
             T result;
@@ -459,61 +475,69 @@ class JsonValue {
         }
     }
 
-    template <typename T>
+    template <typename T, std::enable_if_t<std::is_integral_v<std::remove_reference_t<T>>, int> = 0>
     JsonValue& operator[](T&& key) {
-        if constexpr (std::is_integral_v<std::remove_reference_t<T>>) {
-            if (!isArray()) {
-                destroyValue();
-                m_type        = JsonType::Array;
-                m_value.array = new JsonArray();
-            }
-            auto& arr = *m_value.array;
-            if (key >= 0) {
-                if (static_cast<size_t>(key) >= arr.size()) {
-                    arr.resize(key + 1);
-                }
-                return arr[key];
-            }
-            throw std::out_of_range("Negative array index");
-        } else {
-            static_assert(
-                std::is_convertible_v<T, std::string> ||
-                    std::is_same_v<std::remove_cv_t<std::remove_reference_t<T>>, const char*>,
-                "Key must be convertible to string or be an integral type");
-
-            if (!isObject()) {
-                destroyValue();
-                m_type         = JsonType::Object;
-                m_value.object = new JsonObject;
-            }
-            return (*m_value.object)[std::forward<T>(key)];
+        // key为数字
+        if (!isArray()) {
+            destroyValue();
+            m_type        = JsonType::Array;
+            m_value.array = new JsonArray();
         }
+        auto& arr = *m_value.array;
+        if (key >= 0) {
+            if (static_cast<size_t>(key) >= arr.size()) {
+                arr.resize(key + 1);
+            }
+            return arr[key];
+        }
+        throw std::out_of_range("Negative Array index");
     }
 
-    template <typename T>
+    template <typename T,
+              std::enable_if_t<
+                  !std::is_integral_v<std::remove_reference_t<T>> &&
+                      (std::is_convertible_v<T, std::string> ||
+                       std::is_same_v<std::remove_cv_t<std::remove_reference_t<T>>, const char*>),
+                  int> = 0>
+    JsonValue& operator[](T&& key) {
+        if (!isObject()) {
+            destroyValue();
+            m_type         = JsonType::Object;
+            m_value.object = new JsonObject;
+        }
+        return (*m_value.object)[std::forward<T>(key)];
+    }
+
+    template <typename T, std::enable_if_t<std::is_integral_v<std::remove_reference_t<T>>, int> = 0>
     const JsonValue& operator[](T&& key) const {
-        if constexpr (std::is_integral_v<std::remove_reference_t<T>>) {
-            if (!isArray()) {
-                throw std::runtime_error("Not an array");
-            }
-            auto& arr = *m_value.array;
-            if (key >= 0 && static_cast<size_t>(key) < arr.size()) {
-                return arr[key];
-            }
-            throw std::out_of_range("Array index out of range");
-        } else {
-            if (!isObject()) {
-                throw std::runtime_error("Not an object");
-            }
-            auto it = m_value.object->find(std::forward<T>(key));
-            if (it != m_value.object->end()) {
-                return it->second;
-            }
-            throw std::out_of_range("Key not found");
+        if (!isArray()) {
+            throw std::runtime_error("Not an Array");
         }
+        auto& arr = *m_value.array;
+        if (key >= 0 && static_cast<size_t>(key) < arr.size()) {
+            return arr[key];
+        }
+        throw std::out_of_range("Array index out of range");
     }
 
-    [[nodiscard]] std::string toString() const;
+    template <typename T,
+              std::enable_if_t<
+                  !std::is_integral_v<std::remove_reference_t<T>> &&
+                      (std::is_convertible_v<T, std::string> ||
+                       std::is_same_v<std::remove_cv_t<std::remove_reference_t<T>>, const char*>),
+                  int> = 0>
+    const JsonValue& operator[](T&& key) const {
+        if (!isObject()) {
+            throw std::runtime_error("Not an Object");
+        }
+        auto it = m_value.object->find(std::forward<T>(key));
+        if (it != m_value.object->end()) {
+            return it->second;
+        }
+        throw std::out_of_range("Key not found");
+    }
+
+    [[nodiscard]] std::string toString(int indent = 0) const;
 
     friend std::ostream& operator<<(std::ostream& os, const JsonValue& value) {
         os << value.toString();
@@ -550,7 +574,7 @@ class JsonParser {
     static JsonValue parse(std::string_view json, uint8_t option = DISABLE_EXTENSION);
 
     // 将JSON值转换为字符串
-    static std::string stringify(const JsonValue& value);
+    static std::string stringify(const JsonValue& value, int indent = 0);
 
   private:
     // 解析辅助函数
@@ -563,15 +587,24 @@ class JsonParser {
     static JsonValue parseObject(std::string_view json, size_t& position, uint8_t option);
 
     // 字符串化辅助函数
-    static void        stringifyValue(const JsonValue& value, std::ostringstream& oss);
-    inline static void stringifyNull(const JsonValue& value, std::ostringstream& oss);
-    inline static void stringifyBoolean(const JsonValue& value, std::ostringstream& oss);
-    static void        stringifyInteger(const JsonValue& value, std::ostringstream& oss);
-    static void        stringifyDouble(const JsonValue& value, std::ostringstream& oss);
-    inline static void stringifyString(const JsonValue& value, std::ostringstream& oss);
-    static void        stringifyString(const std::string& value, std::ostringstream& oss);
-    static void        stringifyArray(const JsonValue& value, std::ostringstream& oss);
-    static void        stringifyObject(const JsonValue& value, std::ostringstream& oss);
+    static void
+    stringifyValue(const JsonValue& value, std::ostringstream& oss, int indent, int level);
+    inline static void
+    stringifyNull(const JsonValue& value, std::ostringstream& oss, int indent, int level);
+    inline static void
+    stringifyBoolean(const JsonValue& value, std::ostringstream& oss, int indent, int level);
+    static void
+    stringifyInteger(const JsonValue& value, std::ostringstream& oss, int indent, int level);
+    static void
+    stringifyDouble(const JsonValue& value, std::ostringstream& oss, int indent, int level);
+    inline static void
+    stringifyString(const JsonValue& value, std::ostringstream& oss, int indent, int level);
+    static void
+    stringifyString(const std::string& value, std::ostringstream& oss);
+    static void
+    stringifyArray(const JsonValue& value, std::ostringstream& oss, int indent, int level);
+    static void
+    stringifyObject(const JsonValue& value, std::ostringstream& oss, int indent, int level);
 };
 
 // 容器序列化支持

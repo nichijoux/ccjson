@@ -50,7 +50,7 @@ void fromJson(const JsonValue& j, Person& p) {
 }
 
 JsonValue toJson(const Person& p) {
-    JsonValue j     = JsonValue::object();
+    JsonValue j     = JsonValue::Object();
     j["name"]       = p.name;
     j["age"]        = p.age;
     j["is_student"] = p.is_student;
@@ -69,28 +69,28 @@ void run_examples() {
         std::cout << "\n1. 数组索引访问示例:" << std::endl;
         JsonValue array = {1, 2, 3, 4, 5};
 
-        std::cout << "array[0] = " << static_cast<int>(array[0]) << std::endl;
-        std::cout << "array[4] = " << static_cast<int>(array[4]) << std::endl;
+        std::cout << "Array[0] = " << static_cast<int>(array[0]) << std::endl;
+        std::cout << "Array[4] = " << static_cast<int>(array[4]) << std::endl;
 
         // 动态增长数组
         array[5]  = 6;   // 自动扩展数组
         array[10] = 11;  // 中间的元素会被自动填充为null
-        std::cout << "array[5] = " << static_cast<int>(array[5]) << std::endl;
-        std::cout << "array[10] = " << static_cast<int>(array[10]) << std::endl;
-        std::cout << "array[7] is null: " << (array[7].isNull() ? "yes" : "no") << std::endl;
+        std::cout << "Array[5] = " << static_cast<int>(array[5]) << std::endl;
+        std::cout << "Array[10] = " << static_cast<int>(array[10]) << std::endl;
+        std::cout << "Array[7] is null: " << (array[7].isNull() ? "yes" : "no") << std::endl;
 
         // 嵌套数组访问
-        JsonValue nested = JsonValue::array();
-        nested.push_back(JsonValue::array());
+        JsonValue nested = JsonValue::Array();
+        nested.push_back(JsonValue::Array());
         nested[0] = {1, 2, 3};
         std::cout << "\n2. 嵌套数组访问:" << std::endl;
         std::cout << "nested[0][1] = " << static_cast<int>(nested[0][1]) << std::endl;
 
         // 混合访问
-        JsonValue mixed = JsonValue::object();
-        mixed["array"]  = {1, true, "dsa"};
+        JsonValue mixed = JsonValue::Object();
+        mixed["Array"]  = {1, true, "dsa"};
         std::cout << "\n3. 混合访问:" << std::endl;
-        std::cout << "mixed[\"array\"][1] = " << mixed["array"][2].get<std::string>() << std::endl;
+        std::cout << "mixed[\"Array\"][1] = " << mixed["Array"][2].get<std::string>() << std::endl;
 
         // 错误处理示例
         try {
@@ -105,7 +105,7 @@ void run_examples() {
     // 1. 基本类型示例
     {
         std::cout << "1. 基本类型示例:" << std::endl;
-        JsonValue basic  = JsonValue::object();
+        JsonValue basic  = JsonValue::Object();
         basic["string"]  = "Hello, World!";
         basic["number"]  = 42;
         basic["boolean"] = true;
@@ -123,7 +123,7 @@ void run_examples() {
     // 2. 数组示例
     {
         std::cout << "\n2. 数组示例:" << std::endl;
-        JsonValue arr = JsonValue::array();
+        JsonValue arr = JsonValue::Array();
         arr.push_back(1);
         arr.push_back("text");
         arr.push_back(true);
@@ -149,14 +149,14 @@ void run_examples() {
     // 3. 完整的 Person 示例
     {
         std::cout << "\n3. Person 对象示例:" << std::endl;
-        JsonValue json     = JsonValue::object();
+        JsonValue json     = JsonValue::Object();
         json["name"]       = "Alice";
         json["age"]        = 20;
         json["is_student"] = true;
         json["hobbies"]    = {"reading", "gaming", "coding"};
         json["scores"]     = {95, 88, 92, 90};
 
-        json["contacts"]            = JsonValue::object();
+        json["contacts"]            = JsonValue::Object();
         json["contacts"]["email"]   = "alice@example.com";
         json["contacts"]["phone"]   = "123-456-7890";
         json["contacts"]["twitter"] = "@alice";
@@ -191,13 +191,13 @@ void run_examples() {
     // 自定义类型反序列化示例
     {
         std::cout << "\n5. 自定义类型反序列化示例:" << std::endl;
-        JsonValue person_json            = JsonValue::object();
+        JsonValue person_json            = JsonValue::Object();
         person_json["name"]              = "Alice";
         person_json["age"]               = 25;
         person_json["is_student"]        = true;
         person_json["hobbies"]           = {"reading", "gaming", "coding"};
         person_json["scores"]            = {95, 88, 92};
-        person_json["contacts"]          = JsonValue::object();
+        person_json["contacts"]          = JsonValue::Object();
         person_json["contacts"]["email"] = "alice@example.com";
         person_json["contacts"]["phone"] = "123-456-7890";
 
@@ -283,7 +283,7 @@ void run_examples() {
     }
     {
         std::string s = R"("Hello\0World")";
-        auto        a = JsonParser::parse(s);
+        auto        a = JsonParser::parse(s, JsonParser::ENABLE_PARSE_0_ESCAPE_SEQUENCE);
         std::cout << a;
     }
 }

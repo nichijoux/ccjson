@@ -25,7 +25,7 @@ User parse_user_from_json(const JsonValue& json) {
 
     // 检查是否为对象类型
     if (!json.isObject()) {
-        throw JsonException("Expected JSON object for user");
+        throw JsonException("Expected JSON Object for user");
     }
 
     // 获取基本字段

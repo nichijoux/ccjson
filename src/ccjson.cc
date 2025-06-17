@@ -20,8 +20,9 @@ JsonValue::JsonValue(const JsonValue& other) : m_type(other.m_type) {
 }
 
 JsonValue::JsonValue(JsonValue&& other) noexcept : m_type(other.m_type) {
-    m_value      = other.m_value;
-    other.m_type = JsonType::Null;
+    m_value              = other.m_value;
+    other.m_type         = JsonType::Null;
+    other.m_value.object = nullptr;
 }
 
 JsonValue& JsonValue::operator=(const JsonValue& other) {
@@ -41,18 +42,19 @@ JsonValue& JsonValue::operator=(const JsonValue& other) {
     return *this;
 }
 
-std::string JsonValue::toString() const {
-    return JsonParser::stringify(*this);
-}
-
 JsonValue& JsonValue::operator=(JsonValue&& other) noexcept {
     if (this != &other) {
         destroyValue();
-        m_type       = other.m_type;
-        m_value      = other.m_value;
-        other.m_type = JsonType::Null;
+        m_type               = other.m_type;
+        m_value              = other.m_value;
+        other.m_type         = JsonType::Null;
+        other.m_value.object = nullptr;
     }
     return *this;
+}
+
+std::string JsonValue::toString(int indent) const {
+    return JsonParser::stringify(*this, indent);
 }
 
 void JsonValue::destroyValue() {
@@ -83,9 +85,9 @@ JsonValue JsonParser::parse(std::string_view json, uint8_t option) {
     return result;
 }
 
-std::string JsonParser::stringify(const JsonValue& value) {
+std::string JsonParser::stringify(const JsonValue& value, int indent) {
     std::ostringstream oss;
-    stringifyValue(value, oss);
+    stringifyValue(value, oss, indent, 0);
     return oss.str();
 }
 
@@ -432,7 +434,7 @@ JsonValue JsonParser::parseArray(std::string_view json, size_t& position, uint8_
     // 跳过无用字符串
     SKIP_USELESS_CHAR(json, position);
     if (position >= json.size()) {
-        throw JsonParseException("Unexpected end of array", position);
+        throw JsonParseException("Unexpected end of Array", position);
     }
     // 如果遇到了]
     if (json[position] == ']') {
@@ -450,7 +452,7 @@ JsonValue JsonParser::parseArray(std::string_view json, size_t& position, uint8_
         // 无用字符
         SKIP_USELESS_CHAR(json, position);
         if (position >= json.size()) {
-            throw JsonParseException("Unexpected end of array", position);
+            throw JsonParseException("Unexpected end of Array", position);
         }
         // 如果遇到了]
         if (json[position] == ']') {
@@ -473,7 +475,7 @@ JsonValue JsonParser::parseObject(std::string_view json, size_t& position, uint8
     SKIP_USELESS_CHAR(json, position);
     // 范围检测
     if (position >= json.size()) {
-        throw JsonParseException("Unexpected end of object", position);
+        throw JsonParseException("Unexpected end of Object", position);
     }
     // 是否已经结束
     if (json[position] == '}') {
@@ -491,13 +493,13 @@ JsonValue JsonParser::parseObject(std::string_view json, size_t& position, uint8
         SKIP_USELESS_CHAR(json, position);
         // 是否超范围,或者是否没有:
         if (position >= json.size() || json[position] != ':') {
-            throw JsonParseException("Unexpected end of object", position);
+            throw JsonParseException("Unexpected end of Object", position);
         }
         position++;
         // 准备解析值
         JsonValue value = parseValue(json, position, option);
         if (position >= json.size()) {
-            throw JsonParseException("Unexpected end of array", position);
+            throw JsonParseException("Unexpected end of Array", position);
         }
         object.emplace(key.get<std::string>(), value);
         SKIP_USELESS_CHAR(json, position);
@@ -514,10 +516,13 @@ JsonValue JsonParser::parseObject(std::string_view json, size_t& position, uint8
     }
 }
 
-void JsonParser::stringifyValue(const JsonValue& value, std::ostringstream& oss) {
+void JsonParser::stringifyValue(const JsonValue&    value,
+                                std::ostringstream& oss,
+                                int                 indent,
+                                int                 level) {
     // 根据类型调用不同的stringify
 #define STRINGIFY(type)                                                                            \
-    case JsonType::type: return stringify##type(value, oss)
+    case JsonType::type: return stringify##type(value, oss, indent, level)
     switch (value.type()) {
         STRINGIFY(Null);
         STRINGIFY(Boolean);
@@ -530,15 +535,21 @@ void JsonParser::stringifyValue(const JsonValue& value, std::ostringstream& oss)
 #undef STRINGIFY
 }
 
-void JsonParser::stringifyNull(const ccjson::JsonValue& value, std::ostringstream& oss) {
+void JsonParser::stringifyNull(const ccjson::JsonValue& value, std::ostringstream& oss, int, int) {
     oss << "null";
 }
 
-void JsonParser::stringifyBoolean(const ccjson::JsonValue& value, std::ostringstream& oss) {
+void JsonParser::stringifyBoolean(const ccjson::JsonValue& value,
+                                  std::ostringstream&      oss,
+                                  int,
+                                  int) {
     oss << (value.get<bool>() ? "true" : "false");
 }
 
-void JsonParser::stringifyInteger(const ccjson::JsonValue& value, std::ostringstream& oss) {
+void JsonParser::stringifyInteger(const ccjson::JsonValue& value,
+                                  std::ostringstream&      oss,
+                                  int,
+                                  int) {
     auto num = value.get<int64_t>();
     if (std::isfinite(num)) {
         oss << num;
@@ -547,7 +558,10 @@ void JsonParser::stringifyInteger(const ccjson::JsonValue& value, std::ostringst
     }
 }
 
-void JsonParser::stringifyDouble(const ccjson::JsonValue& value, std::ostringstream& oss) {
+void JsonParser::stringifyDouble(const ccjson::JsonValue& value,
+                                 std::ostringstream&      oss,
+                                 int,
+                                 int) {
     auto num = value.get<double>();
     if (std::isfinite(num)) {
         oss << num;
@@ -556,7 +570,10 @@ void JsonParser::stringifyDouble(const ccjson::JsonValue& value, std::ostringstr
     }
 }
 
-void JsonParser::stringifyString(const ccjson::JsonValue& value, std::ostringstream& oss) {
+void JsonParser::stringifyString(const ccjson::JsonValue& value,
+                                 std::ostringstream&      oss,
+                                 int                      indent,
+                                 int                      level) {
     stringifyString(value.get<std::string>(), oss);
 }
 
@@ -577,30 +594,58 @@ void JsonParser::stringifyString(const std::string& value, std::ostringstream& o
     oss << '"';
 }
 
-void JsonParser::stringifyArray(const ccjson::JsonValue& value, std::ostringstream& oss) {
+void JsonParser::stringifyArray(const ccjson::JsonValue& value,
+                                std::ostringstream&      oss,
+                                int                      indent,
+                                int                      level) {
+    const auto& array = value.get<JsonArray>();
+    if (array.empty()) {
+        oss << "[]";
+        return;
+    }
     oss << "[";
-    auto array = value.get<JsonArray>();
     for (size_t i = 0; i < array.size(); i++) {
         if (i > 0) {
             oss << ",";
         }
-        stringifyValue(array[i], oss);
+        if (indent != 0) {
+            oss << "\n";
+        }
+        oss << std::string((level + 1) * indent, ' ');
+        stringifyValue(array[i], oss, indent, level + 1);
+    }
+    if (indent != 0) {
+        oss << "\n" << std::string(level * indent, ' ');
     }
     oss << "]";
 }
 
-void JsonParser::stringifyObject(const ccjson::JsonValue& value, std::ostringstream& oss) {
+void JsonParser::stringifyObject(const ccjson::JsonValue& value,
+                                 std::ostringstream&      oss,
+                                 int                      indent,
+                                 int                      level) {
+    const auto& object = value.get<JsonObject>();
+    if (object.empty()) {
+        oss << "{}";
+        return;
+    }
     oss << "{";
-    auto object = value.get<JsonObject>();
-    bool first  = true;
+    bool first = true;
     for (const auto& [key, val] : object) {
         if (!first) {
             oss << ',';
         }
+        if (indent != 0) {
+            oss << "\n";
+        }
+        oss << std::string((level + 1) * indent, ' ');
         first = false;
         stringifyString(key, oss);
         oss << ':';
-        stringifyValue(val, oss);
+        stringifyValue(val, oss, indent, level + 1);
+    }
+    if (indent != 0) {
+        oss << "\n" << std::string(level * indent, ' ');
     }
     oss << '}';
 }

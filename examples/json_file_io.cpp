@@ -38,7 +38,7 @@ int main() {
 
         // 验证JSON结构
         if (!json.isObject()) {
-            std::cerr << "Error: Root element is not an object" << std::endl;
+            std::cerr << "Error: Root element is not an Object" << std::endl;
             return 1;
         }
 
@@ -49,7 +49,7 @@ int main() {
             return 1;
         }
 
-        output_file << JsonParser::stringify(json);  // 使用JsonParser::stringify来序列化
+        output_file << JsonParser::stringify(json, 4);  // 使用JsonParser::stringify来序列化
         output_file.close();
 
         std::cout << "Successfully wrote to output.json" << std::endl;
