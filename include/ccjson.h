@@ -1,9 +1,10 @@
+#pragma clang diagnostic push
+#pragma ide diagnostic ignored "modernize-use-nodiscard"
+#pragma ide diagnostic ignored "google-explicit-constructor"
 
 #ifndef CCJSON_JSON_H
-#    define CCJSON_JSON_H
 
-#    pragma clang diagnostic push
-#    pragma ide diagnostic ignored "google-explicit-constructor"
+#    define CCJSON_JSON_H
 
 #    include <map>
 #    include <memory>
@@ -97,24 +98,15 @@ class JsonValue {
         m_value.boolean = value;
     }
 
-    JsonValue(int16_t value) : m_type(JsonType::Integer) {
-        m_value.iNumber = value;
+    template <typename T,
+              std::enable_if_t<std::is_integral_v<T> && !std::is_same_v<T, bool>, int> = 0>
+    JsonValue(T value) : m_type(JsonType::Integer) {
+        m_value.iNumber = static_cast<int64_t>(value);
     }
 
-    JsonValue(int32_t value) : m_type(JsonType::Integer) {
-        m_value.iNumber = value;
-    }
-
-    JsonValue(int64_t value) : m_type(JsonType::Integer) {
-        m_value.iNumber = value;
-    }
-
-    JsonValue(float value) : m_type(JsonType::Double) {
-        m_value.dNumber = value;
-    }
-
-    JsonValue(double value) : m_type(JsonType::Double) {
-        m_value.dNumber = value;
+    template <typename T, std::enable_if_t<std::is_floating_point_v<T>, int> = 0>
+    JsonValue(T value) : m_type(JsonType::Double) {
+        m_value.dNumber = static_cast<double>(value);
     }
 
     JsonValue(const char* value) : m_type(JsonType::String) {
@@ -155,17 +147,17 @@ class JsonValue {
 
     // 支持容器类型的构造函数
     template <typename T>
-    JsonValue(const std::vector<T>& vec) : m_type() {
+    JsonValue(const std::vector<T>& vec) : m_type(JsonType::Array) {
         *this = toJson(vec);
     }
 
     template <typename T>
-    JsonValue(const std::map<std::string, T>& map) {
+    JsonValue(const std::map<std::string, T>& map) : m_type(JsonType::Object) {
         *this = toJson(map);
     }
 
     template <typename T>
-    JsonValue(const std::unordered_map<std::string, T>& map) {
+    JsonValue(const std::unordered_map<std::string, T>& map) : m_type(JsonType::Object) {
         *this = toJson(map);
     }
 
@@ -231,31 +223,31 @@ class JsonValue {
     }
 
     // 类型检查
-    [[nodiscard]] JsonType type() const noexcept {
+    JsonType type() const noexcept {
         return m_type;
     }
 
-    [[nodiscard]] bool isNull() const noexcept {
+    bool isNull() const noexcept {
         return m_type == JsonType::Null;
     }
 
-    [[nodiscard]] bool isBoolean() const noexcept {
+    bool isBoolean() const noexcept {
         return m_type == JsonType::Boolean;
     }
 
-    [[nodiscard]] bool isNumber() const noexcept {
+    bool isNumber() const noexcept {
         return m_type == JsonType::Integer || m_type == JsonType::Double;
     }
 
-    [[nodiscard]] bool isString() const noexcept {
+    bool isString() const noexcept {
         return m_type == JsonType::String;
     }
 
-    [[nodiscard]] bool isArray() const noexcept {
+    bool isArray() const noexcept {
         return m_type == JsonType::Array;
     }
 
-    [[nodiscard]] bool isObject() const noexcept {
+    bool isObject() const noexcept {
         return m_type == JsonType::Object;
     }
 
@@ -564,7 +556,7 @@ class JsonValue {
         throw std::out_of_range("Key not found");
     }
 
-    [[nodiscard]] std::string toString(int indent = 0) const;
+    std::string toString(int indent = 0) const;
 
     friend std::ostream& operator<<(std::ostream& os, const JsonValue& value) {
         os << value.toString();
