@@ -516,6 +516,8 @@ JsonValue JsonParser::parseObject(std::string_view json, size_t& position, uint8
     }
 }
 
+#undef SKIP_USELESS_CHAR
+
 void JsonParser::stringifyValue(const JsonValue&    value,
                                 std::ostringstream& oss,
                                 int                 indent,
