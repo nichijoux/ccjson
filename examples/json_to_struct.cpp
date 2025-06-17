@@ -9,7 +9,7 @@ using namespace ccjson;
 
 // 定义结构体
 struct User {
-    double                   id{};
+    int                      id{};
     std::string              name;
     std::string              screen_name;
     std::string              location;
@@ -45,7 +45,7 @@ JsonValue user_to_json(const User& user) {
     JsonValue json;
 
     // 设置基本字段
-    json["id_str"]          = user.id;  // 使用id_str而不是id
+    json["id"]              = user.id;
     json["name"]            = user.name;
     json["screen_name"]     = user.screen_name;
     json["location"]        = user.location;
@@ -53,19 +53,8 @@ JsonValue user_to_json(const User& user) {
     json["followers_count"] = static_cast<double>(user.followers_count);
     json["friends_count"]   = static_cast<double>(user.friends_count);
 
-    // 创建entities对象
-    json["entities"] = JsonValue(std::map<std::string, JsonValue>());
-
-    // 创建hashtags数组
-    json["entities"]["hashtags"] = JsonValue(std::vector<JsonValue>());
-
-    // 使用新的API添加hashtags
-    for (const auto& hashtag : user.hashtags) {
-        JsonValue hashtag_obj;
-        hashtag_obj["text"] = hashtag;
-        json["entities"]["hashtags"].push_back(hashtag_obj);
-    }
-
+    // 创建entities对象并创建hashtags数组
+    json["entities"]["hashtags"] = user.hashtags;
     return json;
 }
 

@@ -85,12 +85,6 @@ JsonValue JsonParser::parse(std::string_view json, uint8_t option) {
     return result;
 }
 
-std::string JsonParser::stringify(const JsonValue& value, int indent) {
-    std::ostringstream oss;
-    stringifyValue(value, oss, indent, 0);
-    return oss.str();
-}
-
 JsonValue JsonParser::parseValue(std::string_view json, size_t& position, uint8_t option) {
     // 跳过无用字符
     SKIP_USELESS_CHAR(json, position);
@@ -517,6 +511,12 @@ JsonValue JsonParser::parseObject(std::string_view json, size_t& position, uint8
 }
 
 #undef SKIP_USELESS_CHAR
+
+std::string JsonParser::stringify(const JsonValue& value, int indent) {
+    std::ostringstream oss;
+    stringifyValue(value, oss, indent, 0);
+    return oss.str();
+}
 
 void JsonParser::stringifyValue(const JsonValue&    value,
                                 std::ostringstream& oss,

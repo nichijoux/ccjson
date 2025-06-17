@@ -12,6 +12,7 @@
 #    include <stdexcept>
 #    include <string>
 #    include <type_traits>
+#    include <unordered_map>
 #    include <vector>
 
 namespace ccjson {
@@ -31,6 +32,9 @@ struct is_string_map : std::false_type {};
 
 template <typename T>
 struct is_string_map<std::map<std::string, T>> : std::true_type {};
+
+template <typename T>
+struct is_string_map<std::unordered_map<std::string, T>> : std::true_type {};
 
 // JSON值类型
 enum class JsonType { Null, Boolean, Integer, Double, String, Array, Object };
@@ -74,8 +78,12 @@ using JsonObject = std::map<std::string, JsonValue>;
 template <typename T>
 JsonValue toJson(const std::vector<T>& vec);
 
-template <typename T>
-JsonValue toJson(const std::map<std::string, T>& map);
+template <typename Map,
+          typename T = typename Map::mapped_type,
+          typename S = std::enable_if_t<std::is_same_v<typename Map::key_type, std::string> &&
+                                        (std::is_same_v<Map, std::map<std::string, T>> ||
+                                         std::is_same_v<Map, std::unordered_map<std::string, T>>)>>
+JsonValue toJson(const Map& map);
 
 // JSON值类
 class JsonValue {
@@ -137,6 +145,14 @@ class JsonValue {
         m_value.object = new JsonObject(std::move(value));
     }
 
+    JsonValue(const std::unordered_map<std::string, JsonValue>& value) : m_type(JsonType::Object) {
+        m_value.object = new JsonObject(value.begin(), value.end());
+    }
+
+    JsonValue(std::unordered_map<std::string, JsonValue>&& value) : m_type(JsonType::Object) {
+        m_value.object = new JsonObject(value.begin(), value.end());
+    }
+
     // 支持容器类型的构造函数
     template <typename T>
     JsonValue(const std::vector<T>& vec) : m_type() {
@@ -144,7 +160,12 @@ class JsonValue {
     }
 
     template <typename T>
-    JsonValue(const std::map<std::string, T>& map) : m_type() {
+    JsonValue(const std::map<std::string, T>& map) {
+        *this = toJson(map);
+    }
+
+    template <typename T>
+    JsonValue(const std::unordered_map<std::string, T>& map) {
         *this = toJson(map);
     }
 
@@ -287,6 +308,12 @@ class JsonValue {
 
     template <typename T>
     JsonValue& operator=(const std::map<std::string, T>& map) {
+        *this = toJson(map);
+        return *this;
+    }
+
+    template <typename T>
+    JsonValue& operator=(const std::unordered_map<std::string, T>& map) {
         *this = toJson(map);
         return *this;
     }
@@ -599,8 +626,7 @@ class JsonParser {
     stringifyDouble(const JsonValue& value, std::ostringstream& oss, int indent, int level);
     inline static void
     stringifyString(const JsonValue& value, std::ostringstream& oss, int indent, int level);
-    static void
-    stringifyString(const std::string& value, std::ostringstream& oss);
+    static void stringifyString(const std::string& value, std::ostringstream& oss);
     static void
     stringifyArray(const JsonValue& value, std::ostringstream& oss, int indent, int level);
     static void
@@ -622,8 +648,8 @@ JsonValue toJson(const std::vector<T>& vec) {
     return result;
 }
 
-template <typename T>
-JsonValue toJson(const std::map<std::string, T>& map) {
+template <typename Map, typename T, typename>
+JsonValue toJson(const Map& map) {
     std::map<std::string, JsonValue> result;
     for (const auto& [key, value] : map) {
         if constexpr (HasToJson<T>::value) {
@@ -634,7 +660,6 @@ JsonValue toJson(const std::map<std::string, T>& map) {
     }
     return result;
 }
-
 }  // namespace ccjson
 
 #endif
