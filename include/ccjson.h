@@ -614,7 +614,7 @@ JsonValue toJson(const std::vector<T>& vec) {
     result.reserve(vec.size());
     for (const auto& item : vec) {
         if constexpr (HasToJson<T>::value) {
-            result.push_back(to_json(item));
+            result.push_back(toJson(item));
         } else {
             result.push_back(JsonValue(item));
         }
@@ -627,7 +627,7 @@ JsonValue toJson(const std::map<std::string, T>& map) {
     std::map<std::string, JsonValue> result;
     for (const auto& [key, value] : map) {
         if constexpr (HasToJson<T>::value) {
-            result[key] = to_json(value);
+            result[key] = toJson(value);
         } else {
             result[key] = JsonValue(value);
         }
