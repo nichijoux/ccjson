@@ -1,7 +1,9 @@
 #pragma once
 
 #include "ccjson.h"
+#include <cstddef>
 #include <iostream>
+#include <limits>
 
 namespace ccjson {
 
@@ -13,6 +15,11 @@ struct Person {
     std::vector<std::string>           hobbies;
     std::vector<int>                   scores;
     std::map<std::string, std::string> contacts;
+};
+
+struct Class {
+    int                 room;
+    std::vector<Person> students;
 };
 
 // 打印 Person 对象的辅助函数
@@ -50,7 +57,7 @@ void fromJson(const JsonValue& j, Person& p) {
 }
 
 JsonValue toJson(const Person& p) {
-    JsonValue j     = JsonValue::Object();
+    JsonValue j;
     j["name"]       = p.name;
     j["age"]        = p.age;
     j["is_student"] = p.is_student;
@@ -58,6 +65,18 @@ JsonValue toJson(const Person& p) {
     j["scores"]     = p.scores;
     j["contacts"]   = p.contacts;
     return j;
+}
+
+JsonValue toJson(const Class& c) {
+    JsonValue j;
+    j["room"]     = c.room;
+    j["students"] = c.students;
+    return j;
+}
+
+void fromJson(const JsonValue& j, Class& c) {
+    c.room     = j["room"];
+    c.students = j["students"].get<std::vector<Person>>();
 }
 
 // 运行所有示例
@@ -233,7 +252,6 @@ void run_examples() {
 
         // 直接从 Person 构造 JsonValue
         JsonValue json_from_person = alice;
-
         // 使用赋值运算符
         JsonValue another_json;
         another_json = alice;
@@ -283,13 +301,41 @@ void run_examples() {
     }
 
     {
-        std::string s = R"("Hello\0World")";
-        auto        a = JsonParser::parse(s, JsonParser::ENABLE_PARSE_0_ESCAPE_SEQUENCE);
+        std::cout << "\n嵌套结构体展示" << std::endl;
+        Class c;
+        c.room = 1;
+        for (int i = 0; i < 5; ++i) {
+            Person alice;
+            alice.name              = "name" + std::to_string(i);
+            alice.age               = i * 10;
+            alice.is_student        = true;
+            alice.hobbies           = {"reading", "gaming", "coding"};
+            alice.scores            = {95, 88, 92};
+            alice.contacts["email"] = "alice@example.com";
+            alice.contacts["phone"] = "123-456-7890";
+            c.students.emplace_back(alice);
+        }
+        JsonValue j = c;
+        std::cout << "\n结构体转JsonValue\n" << j.toString(4) << std::endl;
+        auto o = j.get<Class>();
+        std::cout << "\nJsonValue转Class: room:" << o.room << std::endl;
+        std::cout << "\nStudents:" << std::endl;
+        for (const auto& p : o.students) {
+            print_person(p);
+            std::cout << std::endl;
+        }
+    }
+
+    {
+        std::string s = R"("\xF0\x9D\x84\x9E")";
+        auto        a = JsonParser::parse(s, JsonParser::ENABLE_PARSE_X_ESCAPE_SEQUENCE);
         std::cout << a;
     }
 }
 
 }  // namespace ccjson
+
+using ccjson::operator""_json;
 
 int main() {
     ccjson::run_examples();
