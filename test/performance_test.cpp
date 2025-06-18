@@ -9,11 +9,10 @@
 #include <vector>
 
 #ifdef _WIN32
-#    include <windows.h>  // 该头文件一定要在psapi.h前
 #    include <psapi.h>
+#    include <windows.h>  // 该头文件一定要在psapi.h前
 #else
 #    include <sys/resource.h>
-#    include <sys/time.h>
 #endif
 
 using json = nlohmann::json;
@@ -80,7 +79,6 @@ TestData ccjson_deserialize(const JsonValue& json_value) {
 // 使用nlohmann/json序列化
 json nlohmann_serialize(const TestData& data) {
     json j;
-
     j["name"]    = data.name;
     j["age"]     = data.age;
     j["tags"]    = data.tags;
@@ -183,20 +181,27 @@ void run_performance_test(int iterations) {
     // 输出结果
     std::cout << std::fixed << std::setprecision(2);
     std::cout << "ccjson Results:\n";
-    std::cout << "  Serialization time: " << ccjson_serialize_time / 1000.0 << " ms\n";
-    std::cout << "  Deserialization time: " << ccjson_deserialize_time / 1000.0 << " ms\n";
-    std::cout << "  Memory usage: " << ccjson_memory / 1024.0 / 1024.0 << " MB\n\n";
+    std::cout << "  Serialization time: " << static_cast<double>(ccjson_serialize_time) / 1000.0
+              << " ms\n";
+    std::cout << "  Deserialization time: " << static_cast<double>(ccjson_deserialize_time) / 1000.0
+              << " ms\n";
+    std::cout << "  Memory usage: " << static_cast<double>(ccjson_memory) / 1024.0 / 1024.0
+              << " MB\n\n";
 
     std::cout << "nlohmann/json Results:\n";
-    std::cout << "  Serialization time: " << nlohmann_serialize_time / 1000.0 << " ms\n";
-    std::cout << "  Deserialization time: " << nlohmann_deserialize_time / 1000.0 << " ms\n";
-    std::cout << "  Memory usage: " << nlohmann_memory / 1024.0 / 1024.0 << " MB\n\n";
+    std::cout << "  Serialization time: " << static_cast<double>(nlohmann_serialize_time) / 1000.0
+              << " ms\n";
+    std::cout << "  Deserialization time: "
+              << static_cast<double>(nlohmann_deserialize_time) / 1000.0 << " ms\n";
+    std::cout << "  Memory usage: " << static_cast<double>(nlohmann_memory) / 1024.0 / 1024.0
+              << " MB\n\n";
 
     // 计算性能比率
-    double serialize_ratio = static_cast<double>(nlohmann_serialize_time) / ccjson_serialize_time;
-    double deserialize_ratio =
-        static_cast<double>(nlohmann_deserialize_time) / ccjson_deserialize_time;
-    double memory_ratio = static_cast<double>(nlohmann_memory) / ccjson_memory;
+    double serialize_ratio =
+        static_cast<double>(nlohmann_serialize_time) / static_cast<double>(ccjson_serialize_time);
+    double deserialize_ratio = static_cast<double>(nlohmann_deserialize_time) /
+                               static_cast<double>(ccjson_deserialize_time);
+    double memory_ratio = static_cast<double>(nlohmann_memory) / static_cast<double>(ccjson_memory);
 
     std::cout << "Performance Comparison (nlohmann/json vs ccjson):\n";
     std::cout << "  Serialization: " << serialize_ratio << "x\n";
@@ -230,8 +235,9 @@ void test_ccjson_parse_performance(const std::string& json_str, int iterations) 
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
 
     std::cout << "Parse time: " << duration.count() << "ms" << std::endl;
-    std::cout << "Average time per parse: " << (duration.count() / static_cast<double>(iterations))
-              << "ms" << std::endl;
+    std::cout << "Average time per parse: "
+              << static_cast<double>(duration.count()) / static_cast<double>(iterations) << "ms"
+              << std::endl;
 }
 
 // 测试nlohmann/json解析性能
@@ -249,8 +255,9 @@ void test_nlohmann_parse_performance(const std::string& json_str, int iterations
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
 
     std::cout << "Parse time: " << duration.count() << "ms" << std::endl;
-    std::cout << "Average time per parse: " << (duration.count() / static_cast<double>(iterations))
-              << "ms" << std::endl;
+    std::cout << "Average time per parse: "
+              << static_cast<double>(duration.count()) / static_cast<double>(iterations) << "ms"
+              << std::endl;
 }
 
 // 测试ccjson序列化性能
@@ -269,7 +276,8 @@ void test_ccjson_stringify_performance(const JsonValue& value, int iterations) {
 
     std::cout << "Stringify time: " << duration.count() << "ms" << std::endl;
     std::cout << "Average time per stringify: "
-              << (duration.count() / static_cast<double>(iterations)) << "ms" << std::endl;
+              << static_cast<double>(duration.count()) / static_cast<double>(iterations) << "ms"
+              << std::endl;
 }
 
 // 测试nlohmann/json序列化性能
@@ -288,7 +296,8 @@ void test_nlohmann_stringify_performance(const json& value, int iterations) {
 
     std::cout << "Stringify time: " << duration.count() << "ms" << std::endl;
     std::cout << "Average time per stringify: "
-              << (duration.count() / static_cast<double>(iterations)) << "ms" << std::endl;
+              << static_cast<double>(duration.count()) / static_cast<double>(iterations) << "ms"
+              << std::endl;
 }
 
 // 测试ccjson往返性能
@@ -308,7 +317,8 @@ void test_ccjson_roundtrip_performance(const std::string& json_str, int iteratio
 
     std::cout << "Roundtrip time: " << duration.count() << "ms" << std::endl;
     std::cout << "Average time per roundtrip: "
-              << (duration.count() / static_cast<double>(iterations)) << "ms" << std::endl;
+              << static_cast<double>(duration.count()) / static_cast<double>(iterations) << "ms"
+              << std::endl;
 }
 
 // 测试nlohmann/json往返性能
@@ -328,7 +338,8 @@ void test_nlohmann_roundtrip_performance(const std::string& json_str, int iterat
 
     std::cout << "Roundtrip time: " << duration.count() << "ms" << std::endl;
     std::cout << "Average time per roundtrip: "
-              << (duration.count() / static_cast<double>(iterations)) << "ms" << std::endl;
+              << static_cast<double>(duration.count()) / static_cast<double>(iterations) << "ms"
+              << std::endl;
 }
 
 // 测试ccjson内存使用
@@ -375,7 +386,7 @@ int main() {
         std::cout << "Twitter.json size: " << json_str.size() << " bytes" << std::endl;
 
         // 设置测试迭代次数
-        const int iterations = 100;
+        const int iterations = 500;
 
         // 运行性能测试
         std::cout << "\n=== Twitter.json Performance Tests ===\n" << std::endl;
