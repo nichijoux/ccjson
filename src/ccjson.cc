@@ -2,7 +2,6 @@
 #pragma ide diagnostic ignored "misc-no-recursion"
 #include "ccjson.h"
 #include <cmath>
-#include <iomanip>
 #include <sstream>
 
 namespace ccjson {
@@ -53,11 +52,99 @@ JsonValue& JsonValue::operator=(JsonValue&& other) noexcept {
     return *this;
 }
 
+JsonValue::~JsonValue() {
+    destroyValue();
+}
+
+JsonValue& JsonValue::set(const std::string& key, const JsonValue& value) {
+    if (m_type != JsonType::Object) {
+        destroyValue();
+        m_type         = JsonType::Object;
+        m_value.object = new JsonObject();
+    }
+    (*m_value.object)[key] = value;
+    return *this;
+}
+
+JsonValue& JsonValue::push_back(JsonValue value) {
+    if (!isArray()) {
+        destroyValue();
+        m_type        = JsonType::Array;
+        m_value.array = new JsonArray();
+    }
+    m_value.array->emplace_back(std::move(value));
+    return *this;
+}
+
+JsonValue::operator bool() const {
+    if (!isBoolean()) {
+        throw JsonException("Cannot convert to bool");
+    }
+    return m_value.boolean;
+}
+
+JsonValue::operator int16_t() const {
+    if (!isNumber()) {
+        throw JsonException("Cannot convert to int");
+    }
+    if (m_type == JsonType::Integer) {
+        return static_cast<int16_t>(m_value.iNumber);
+    }
+    return static_cast<int16_t>(m_value.dNumber);
+}
+
+JsonValue::operator int32_t() const {
+    if (!isNumber()) {
+        throw JsonException("Cannot convert to int");
+    }
+    if (m_type == JsonType::Integer) {
+        return static_cast<int32_t>(m_value.iNumber);
+    }
+    return static_cast<int32_t>(m_value.dNumber);
+}
+
+JsonValue::operator int64_t() const {
+    if (!isNumber()) {
+        throw JsonException("Cannot convert to int");
+    }
+    if (m_type == JsonType::Integer) {
+        return m_value.iNumber;
+    }
+    return static_cast<int64_t>(m_value.dNumber);
+}
+
+JsonValue::operator float() const {
+    if (!isNumber()) {
+        throw JsonException("Cannot convert to double");
+    }
+    if (m_type == JsonType::Double) {
+        return static_cast<float>(m_value.dNumber);
+    }
+    return static_cast<float>(m_value.iNumber);
+}
+
+JsonValue::operator double() const {
+    if (!isNumber()) {
+        throw JsonException("Cannot convert to double");
+    }
+    if (m_type == JsonType::Double) {
+        return m_value.dNumber;
+    }
+    return static_cast<double>(m_value.iNumber);
+}
+
+JsonValue::operator std::string() const {
+    if (!isString()) {
+        throw JsonException("Cannot convert to string");
+    }
+    return *m_value.string;
+}
+
 std::string JsonValue::toString(int indent) const {
     return JsonParser::stringify(*this, indent);
 }
 
-void JsonValue::destroyValue() {
+void JsonValue::destroyValue() noexcept {
     switch (m_type) {
         // 动态分配的内存
         case JsonType::String: delete m_value.string; break;
@@ -337,74 +424,58 @@ JsonValue JsonParser::parseString(std::string_view json, size_t& position, uint8
                             throw JsonParseException("Empty \\x escape sequence", position);
                         }
 
-                        // 尝试解码 UTF-8 字节流
-                        try {
-                            // 解码 UTF-8 → Unicode 码点
-                            char32_t codePoint = 0;
-                            size_t   i         = 0;
-                            if (utf8Bytes[0] <= 0x7F) {
-                                codePoint = utf8Bytes[0];
-                                i         = 1;
-                            } else if ((utf8Bytes[0] & 0xE0) == 0xC0) {
-                                codePoint = ((utf8Bytes[0] & 0x1F) << 6) | (utf8Bytes[1] & 0x3F);
-                                i         = 2;
-                            } else if ((utf8Bytes[0] & 0xF0) == 0xE0) {
-                                codePoint = ((utf8Bytes[0] & 0x0F) << 12) |
-                                            ((utf8Bytes[1] & 0x3F) << 6) | (utf8Bytes[2] & 0x3F);
-                                i = 3;
-                            } else if ((utf8Bytes[0] & 0xF8) == 0xF0) {
-                                codePoint = ((utf8Bytes[0] & 0x07) << 18) |
-                                            ((utf8Bytes[1] & 0x3F) << 12) |
-                                            ((utf8Bytes[2] & 0x3F) << 6) | (utf8Bytes[3] & 0x3F);
-                                i = 4;
-                            } else {
-                                throw JsonParseException("Invalid UTF-8 sequence", position);
-                            }
-
-                            // 检查是否完全解码
-                            if (i != utf8Bytes.size()) {
-                                throw JsonParseException("Invalid UTF-8 sequence", position);
-                            }
-
-                            // 编码 Unicode 码点 → \uXXXX or \uXXXX\uXXXX (代理对)
-                            if (codePoint <= 0xFFFF) {
-                                // 基本平面（BMP）
-                                result += "\\u";
-                                char buf[5];
-                                snprintf(buf, sizeof(buf), "%04X",
-                                         static_cast<uint16_t>(codePoint));
-                                result += buf;
-                            } else {
-                                // 补充平面（Surrogate Pair）
-                                codePoint -= 0x10000;
-                                auto highSurrogate =
-                                    static_cast<uint16_t>((codePoint >> 10) + 0xD800);
-                                auto lowSurrogate =
-                                    static_cast<uint16_t>((codePoint & 0x3FF) + 0xDC00);
-                                result += "\\u";
-                                char buffer[5];
-                                snprintf(buffer, sizeof(buffer), "%04X", highSurrogate);
-                                result += buffer;
-                                result += "\\u";
-                                snprintf(buffer, sizeof(buffer), "%04X", lowSurrogate);
-                                result += buffer;
-                            }
-                        } catch (...) {
-                            // 如果 UTF-8 解码失败，直接存储原始字节
-                            for (uint8_t byte : utf8Bytes) {
-                                result.push_back(static_cast<char>(byte));
-                            }
+                        // 解码 UTF-8 → Unicode 码点
+                        char32_t codePoint = 0;
+                        size_t   i         = 0;
+                        if (utf8Bytes[0] <= 0x7F) {
+                            codePoint = utf8Bytes[0];
+                            i         = 1;
+                        } else if ((utf8Bytes[0] & 0xE0) == 0xC0) {
+                            codePoint = ((utf8Bytes[0] & 0x1F) << 6) | (utf8Bytes[1] & 0x3F);
+                            i         = 2;
+                        } else if ((utf8Bytes[0] & 0xF0) == 0xE0) {
+                            codePoint = ((utf8Bytes[0] & 0x0F) << 12) |
+                                        ((utf8Bytes[1] & 0x3F) << 6) | (utf8Bytes[2] & 0x3F);
+                            i = 3;
+                        } else if ((utf8Bytes[0] & 0xF8) == 0xF0) {
+                            codePoint = ((utf8Bytes[0] & 0x07) << 18) |
+                                        ((utf8Bytes[1] & 0x3F) << 12) |
+                                        ((utf8Bytes[2] & 0x3F) << 6) | (utf8Bytes[3] & 0x3F);
+                            i = 4;
                         }
-                        break;
+
+                        // 检查是否完全解码
+                        if (i != utf8Bytes.size()) {
+                            throw JsonParseException("Invalid UTF-8 sequence", position);
+                        }
+
+                        // 编码 Unicode 码点 → \uXXXX or \uXXXX\uXXXX (代理对)
+                        if (codePoint <= 0xFFFF) {
+                            // 基本平面（BMP）
+                            result += "\\u";
+                            char buffer[5];
+                            snprintf(buffer, sizeof(buffer), "%04X", codePoint);
+                            result += buffer;
+                        } else {
+                            // 补充平面（Surrogate Pair）
+                            codePoint -= 0x10000;
+                            auto highSurrogate = static_cast<uint16_t>((codePoint >> 10) + 0xD800);
+                            auto lowSurrogate = static_cast<uint16_t>((codePoint & 0x3FF) + 0xDC00);
+                            char buffer[7];
+                            snprintf(buffer, sizeof(buffer), "\\u%04X", highSurrogate);
+                            result += buffer;
+                            snprintf(buffer, sizeof(buffer), "\\u%04X", lowSurrogate);
+                            result += buffer;
+                        }
                     } else {
                         throw JsonParseException("not support parse x escape sequence", position);
                     }
+                    break;
                 }
                 case '0': {
                     if (option & ENABLE_PARSE_0_ESCAPE_SEQUENCE) {
                         // \0 转为 \u0000
-                        result.push_back('\\');
-                        result += "u0000";
+                        result += "\\u0000";
                     } else {
                         throw JsonParseException("Invalid \\0 escape sequence", position);
                     }
@@ -436,7 +507,7 @@ JsonValue JsonParser::parseArray(std::string_view json, size_t& position, uint8_
         return std::move(result);
     }
     // 预分配空间
-    result.reserve(16);
+    result.reserve(32);
     // 解析后面的 value
     while (true) {
         // 跳过无用字符
