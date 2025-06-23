@@ -14,6 +14,7 @@
 #    include <string>
 #    include <type_traits>
 #    include <unordered_map>
+#    include <variant>
 #    include <vector>
 
 namespace ccjson {
@@ -92,8 +93,7 @@ enum class JsonType {
  * @class JsonException
  * @brief JSON 操作的通用异常类。
  *
- * 用于表示 JSON 处理过程中发生的错误，例如类型转换失败或无效值。
- * @version 1.0
+ * 用于表示 JSON 处理过程中发生的错误，例如类型转换失败或无效值
  */
 class JsonException : public std::runtime_error {
   public:
@@ -103,12 +103,12 @@ class JsonException : public std::runtime_error {
      */
     explicit JsonException(const std::string& message) : std::runtime_error(message) {}
 };
+
 /**
  * @class JsonParseException
  * @brief JSON 解析过程中的异常类。
  *
  * 用于表示 JSON 字符串解析失败的情况，包含错误信息和发生错误的字符位置。
- * @version 1.0
  */
 class JsonParseException : public std::runtime_error {
   public:
@@ -155,8 +155,8 @@ template <typename T, typename = void>
 struct HasFromJson : std::false_type {};
 
 /**
- * @struct HasFromJson&lt;T, std::void_t&lt;decltype(fromJson(std::declval&lt;const JsonValue&&gt;(),
- * std::declval&lt;T&>()))&gt;&gt;
+ * @struct HasFromJson&lt;T, std::void_t&lt;decltype(fromJson(std::declval&lt;const
+ * JsonValue&&gt;(), std::declval&lt;T&>()))&gt;&gt;
  * @brief HasFromJson 的特化版本，检查类型是否具有有效的 fromJson 函数。
  *
  * 如果类型 T 具有 fromJson 函数且返回值类型为 void，则继承自 std::true_type。
@@ -267,25 +267,25 @@ class JsonValue {
     }
 
     /**
-     * @brief 构造字符串类型的 JSON 数据（C 风格字符串）
-     * @param value C 风格字符串。
+     * @brief 构造字符串类型的 JSON 数据
+     * @param value 字符串
      */
-    JsonValue(const char* value) : m_type(JsonType::String) {
-        m_value.string = new JsonString(value);
+    /**
+     * @brief 构造字符串类型的 JSON 数据 (高级 SFINAE 版本)
+     * @param value 任何类似字符串的类型
+     */
+    template <typename T,
+              // SFINAE 约束条件
+              typename = std::enable_if_t<
+                  // 1. 类型 T 可以转换为 std::string_view
+                  std::is_convertible_v<const std::decay_t<T>&, std::string> &&
+                  // 2. 并且，类型 T 不是 JsonValue (关键！避免与拷贝构造冲突)
+                  !std::is_same_v<std::decay_t<T>, JsonValue>>>
+    JsonValue(T&& value) : m_type(JsonType::String) {
+        m_value.string = new JsonString(std::string(value));
     }
 
-    /**
-     * @brief 构造字符串类型的 JSON 数据（std::string）
-     * @param value 字符串对象。
-     */
-    JsonValue(const std::string& value) : m_type(JsonType::String) {
-        m_value.string = new JsonString(value);
-    }
-
-    /**
-     * @brief 构造字符串类型的 JSON 数据（移动语义）
-     * @param value 字符串对象（右值）
-     */
+    // 同样，建议保留移动构造函数以优化性能
     JsonValue(std::string&& value) : m_type(JsonType::String) {
         m_value.string = new JsonString(std::move(value));
     }
@@ -299,43 +299,11 @@ class JsonValue {
     }
 
     /**
-     * @brief 构造数组类型的 JSON 数据（移动语义）
-     * @param value JSON 数组对象（右值）
-     */
-    JsonValue(JsonArray&& value) : m_type(JsonType::Array) {
-        m_value.array = new JsonArray(std::move(value));
-    }
-
-    /**
      * @brief 构造对象类型的 JSON 数据。
      * @param value JSON 对象（键值对映射）
      */
     JsonValue(const JsonObject& value) : m_type(JsonType::Object) {
         m_value.object = new JsonObject(value);
-    }
-
-    /**
-     * @brief 构造对象类型的 JSON 数据（移动语义）
-     * @param value JSON 对象（右值）
-     */
-    JsonValue(JsonObject&& value) : m_type(JsonType::Object) {
-        m_value.object = new JsonObject(std::move(value));
-    }
-
-    /**
-     * @brief 构造对象类型的 JSON 数据（无序映射）
-     * @param value 无序映射对象。
-     */
-    JsonValue(const std::unordered_map<std::string, JsonValue>& value) : m_type(JsonType::Object) {
-        m_value.object = new JsonObject(value.begin(), value.end());
-    }
-
-    /**
-     * @brief 构造对象类型的 JSON 数据（无序映射，移动语义）
-     * @param value 无序映射对象（右值）
-     */
-    JsonValue(std::unordered_map<std::string, JsonValue>&& value) : m_type(JsonType::Object) {
-        m_value.object = new JsonObject(value.begin(), value.end());
     }
 
     /**
@@ -366,6 +334,14 @@ class JsonValue {
     template <typename T>
     JsonValue(const std::unordered_map<std::string, T>& map) : m_type(JsonType::Object) {
         *this = toJson(map);
+    }
+
+    // 通用模板构造函数，确保KeyType可以转换为std::string
+    template <typename Key, std::enable_if_t<std::is_convertible_v<Key, std::string>, int> = 0>
+    JsonValue(const std::pair<Key, JsonValue>& pair) : m_type(JsonType::Array) {
+        m_value.array = new JsonArray;
+        m_value.array->emplace_back(static_cast<std::string>(pair.first));
+        m_value.array->emplace_back(pair.second);
     }
 
     /**
@@ -719,12 +695,12 @@ class JsonValue {
             return *this;
         } else if constexpr (std::is_same_v<T, JsonObject>) {
             if (!isObject()) {
-                throw std::runtime_error("Not an Object");
+                throw JsonException("Not an Object");
             }
             return *m_value.object;
         } else if constexpr (std::is_same_v<T, JsonArray>) {
             if (!isArray()) {
-                throw std::runtime_error("Not an Array");
+                throw JsonException("Not an Array");
             }
             return *m_value.array;
         } else if constexpr (std::is_arithmetic_v<T>) {
@@ -810,7 +786,7 @@ class JsonValue {
             }
             return arr[key];
         }
-        throw std::out_of_range("Negative Array index");
+        throw JsonException("Negative Array index");
     }
 
     /**
@@ -845,13 +821,13 @@ class JsonValue {
     template <typename T, std::enable_if_t<std::is_integral_v<std::remove_reference_t<T>>, int> = 0>
     const JsonValue& operator[](T&& key) const {
         if (!isArray()) {
-            throw std::runtime_error("Not an Array");
+            throw JsonException("Not an Array");
         }
         auto& arr = *m_value.array;
         if (key >= 0 && static_cast<size_t>(key) < arr.size()) {
             return arr[key];
         }
-        throw std::out_of_range("Array index out of range");
+        throw JsonException("Array index out of range");
     }
 
     /**
@@ -869,13 +845,13 @@ class JsonValue {
                   int> = 0>
     const JsonValue& operator[](T&& key) const {
         if (!isObject()) {
-            throw std::runtime_error("Not an Object");
+            throw JsonException("Not an Object");
         }
         auto it = m_value.object->find(std::forward<T>(key));
         if (it != m_value.object->end()) {
             return it->second;
         }
-        throw std::out_of_range("Key not found");
+        throw JsonException("Key not found");
     }
 
     /**
@@ -897,6 +873,87 @@ class JsonValue {
     }
 
   private:
+    class ConstIterator {
+      public:
+        using iterator_catalog = std::forward_iterator_tag;
+        using value_type       = const JsonValue;
+        using difference_type  = std::ptrdiff_t;
+        using reference        = value_type&;
+        using pointer          = value_type*;
+
+        // Pre-increment operator
+        inline ConstIterator& operator++() {
+            std::visit([](auto& it) { ++it; }, m_iterator);
+            return *this;
+        }
+
+        // Post-increment operator
+        inline ConstIterator operator++(int) {
+            auto temp = *this;
+            ++(*this);
+            return temp;
+        }
+
+        // Equality operator
+        inline bool operator==(const ConstIterator& other) const {
+            return m_host == other.m_host && m_iterator == other.m_iterator;
+        }
+
+        // Inequality operator
+        inline bool operator!=(const ConstIterator& other) const {
+            return !(*this == other);
+        }
+
+        // Dereference operator
+        reference operator*() const;
+
+        // Member access operator
+        inline pointer operator->() const {
+            return &this->operator*();
+        }
+
+        std::string key() const;
+
+        inline reference value() const {
+            return operator*();
+        }
+
+      private:
+        using IteratorType =
+            std::variant<JsonArray::const_iterator, JsonObject ::const_iterator, size_t>;
+
+        ConstIterator(const JsonValue* host, IteratorType iterator)
+            : m_host(host), m_iterator(iterator) {}
+
+      private:
+        const JsonValue* m_host;
+        IteratorType     m_iterator;
+
+        friend class JsonValue;
+    };
+
+  public:
+    ConstIterator begin() const {
+        switch (m_type) {
+            case JsonType::Object: return {this, m_value.object->begin()};
+            case JsonType::Array: return {this, m_value.array->begin()};
+            default:
+                // For simple types, begin is represented by index 0
+                return ConstIterator(this, size_t{0});
+        }
+    }
+
+    ConstIterator end() const {
+        switch (m_type) {
+            case JsonType::Object: return {this, m_value.object->end()};
+            case JsonType::Array: return {this, m_value.array->end()};
+            default:
+                // For simple types, end is represented by index 1
+                return ConstIterator(this, size_t{1});
+        }
+    }
+
+  private:
     /**
      * @brief 释放内部存储的动态内存。
      */
@@ -913,7 +970,7 @@ class JsonValue {
         std::vector<JsonValue>*           array;    ///< 数组指针
         std::map<std::string, JsonValue>* object;   ///< 对象指针
     } m_value{};                                    ///< 存储值的联合体
-};
+};  // namespace ccjson
 
 // JSON解析器类
 class JsonParser {
@@ -1122,9 +1179,9 @@ JsonValue toJson(const std::vector<T>& vec) {
     result.reserve(vec.size());
     for (const auto& item : vec) {
         if constexpr (HasToJson<T>::value) {
-            result.push_back(toJson(item));
+            result.emplace_back(toJson(item));
         } else {
-            result.push_back(JsonValue(item));
+            result.emplace_back(item);
         }
     }
     return result;

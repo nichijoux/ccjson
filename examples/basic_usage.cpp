@@ -1,9 +1,8 @@
 #pragma once
 
 #include "ccjson.h"
-#include <cstddef>
+#include <fstream>
 #include <iostream>
-#include <limits>
 
 namespace ccjson {
 
@@ -298,9 +297,7 @@ void run_examples() {
 
         JsonValue allArray = 213985441333436;
         std::cout << "\n超长数字:\n" << allArray << std::endl;
-    }
 
-    {
         std::cout << "\n嵌套结构体展示" << std::endl;
         Class c;
         c.room = 1;
@@ -327,9 +324,33 @@ void run_examples() {
     }
 
     {
-        std::string s = R"("\xF0\x9D\x84\x9E")";
-        auto        a = JsonParser::parse(s, JsonParser::ENABLE_PARSE_X_ESCAPE_SEQUENCE);
-        std::cout << a;
+        std::string s = R"("\uD834\uDD1E")";
+        std::cout << "\r10.扩展JSON解析:" << std::endl;
+        auto v = JsonParser::parse(s, JsonParser::ENABLE_PARSE_X_ESCAPE_SEQUENCE);
+        std::cout << v << std::endl;
+        std::ofstream output_file("o.json");
+        if (!output_file.is_open()) {
+            std::cerr << "Error: Could not open output.json for writing" << std::endl;
+            return;
+        }
+
+        output_file << v;  // 使用JsonParser::stringify来序列化
+        output_file.close();
+    }
+
+    {
+        std::cout << "\n9.const迭代器展示" << std::endl;
+        JsonValue dynamic;
+        dynamic["data"] = {{"str", "hello"}, {"num", 42}, {"bool", true}};
+        dynamic["vec"]  = {1, 2, 3, 4, 5};
+        for (auto it = dynamic.begin(); it != dynamic.end(); it++) {
+            std::cout << it.key() << " : " << it.value() << std::endl;
+        }
+
+        std::cout << std::endl;
+        for (auto& d : dynamic) {
+            std::cout << d << std::endl;
+        }
     }
 }
 

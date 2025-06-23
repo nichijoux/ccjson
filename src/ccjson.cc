@@ -452,9 +452,8 @@ JsonValue JsonParser::parseString(std::string_view json, size_t& position, uint8
                         // 编码 Unicode 码点 → \uXXXX or \uXXXX\uXXXX (代理对)
                         if (codePoint <= 0xFFFF) {
                             // 基本平面（BMP）
-                            result += "\\u";
-                            char buffer[5];
-                            snprintf(buffer, sizeof(buffer), "%04X", codePoint);
+                            char buffer[7];
+                            snprintf(buffer, sizeof(buffer), "\\u%04X", codePoint);
                             result += buffer;
                         } else {
                             // 补充平面（Surrogate Pair）
@@ -504,7 +503,7 @@ JsonValue JsonParser::parseArray(std::string_view json, size_t& position, uint8_
     // 如果遇到了]
     if (json[position] == ']') {
         position++;
-        return std::move(result);
+        return result;
     }
     // 预分配空间
     result.reserve(32);
@@ -522,7 +521,7 @@ JsonValue JsonParser::parseArray(std::string_view json, size_t& position, uint8_
         // 如果遇到了]
         if (json[position] == ']') {
             position++;
-            return std::move(result);
+            return result;
         }
         // 如果不是]那就必须为
         if (json[position] != ',') {
@@ -545,7 +544,7 @@ JsonValue JsonParser::parseObject(std::string_view json, size_t& position, uint8
     // 是否已经结束
     if (json[position] == '}') {
         position++;
-        return std::move(object);
+        return object;
     }
     // 说明存在值
     while (true) {
@@ -571,7 +570,7 @@ JsonValue JsonParser::parseObject(std::string_view json, size_t& position, uint8
         // 如果遇到了}
         if (json[position] == '}') {
             position++;
-            return std::move(object);
+            return object;
         }
         // 如果不是]那就必须为
         if (json[position] != ',') {
@@ -722,5 +721,33 @@ void JsonParser::stringifyObject(const ccjson::JsonValue& value,
     }
     oss << '}';
 }
+
+JsonValue::ConstIterator::value_type& JsonValue::ConstIterator::operator*() const {
+    return std::visit(
+        [this](const auto& it) -> reference {
+            using T = std::decay_t<decltype(it)>;
+            if constexpr (std::is_same_v<T, JsonObject::const_iterator>) {
+                return it->second;  // For objects, return the value part of the pair
+            } else if constexpr (std::is_same_v<T, JsonArray::const_iterator>) {
+                return *it;  // For arrays, return the element
+            } else {
+                return *m_host;  // For simple types, return the value itself
+            }
+        },
+        m_iterator);
+}
+
+std::string JsonValue::ConstIterator::key() const {
+    return std::visit(
+        [](const auto& it) -> std::string {
+            using T = std::decay_t<decltype(it)>;
+            if constexpr (std::is_same_v<T, JsonObject ::const_iterator>) {
+                return it->first;
+            }
+            throw JsonException("cannot use key() for non-Object iterators");
+        },
+        m_iterator);
+}
+
 }  // namespace ccjson
 #pragma clang diagnostic pop
