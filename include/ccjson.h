@@ -267,22 +267,18 @@ class JsonValue {
     }
 
     /**
-     * @brief 构造字符串类型的 JSON 数据
-     * @param value 字符串
-     */
-    /**
      * @brief 构造字符串类型的 JSON 数据 (高级 SFINAE 版本)
      * @param value 任何类似字符串的类型
      */
     template <typename T,
               // SFINAE 约束条件
               typename = std::enable_if_t<
-                  // 1. 类型 T 可以转换为 std::string_view
+                  // 1. 类型 T 可以转换为 std::string
                   std::is_convertible_v<const std::decay_t<T>&, std::string> &&
-                  // 2. 并且，类型 T 不是 JsonValue (关键！避免与拷贝构造冲突)
+                  // 2. 并且，类型 T 不是 JsonValue
                   !std::is_same_v<std::decay_t<T>, JsonValue>>>
     JsonValue(T&& value) : m_type(JsonType::String) {
-        m_value.string = new JsonString(std::string(value));
+        m_value.string = new JsonString(value);
     }
 
     // 同样，建议保留移动构造函数以优化性能

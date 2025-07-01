@@ -20,6 +20,7 @@
 - **美化输出**：支持自定义缩进的 JSON 输出，便于阅读。
 - **用户友好 API**：直观的操作符（`[]`、`=`）和方法（`get<T>`、`set`、`push_back`），简化 JSON 操作。
 - **字面量支持**：使用 `_json` 用户定义字面量直接解析 JSON 字符串。
+- **编译器反射**：基于c++17的静态反射实现，用于注册序列化和反序列化结构体
 
 ## 要求
 
@@ -82,6 +83,7 @@ int main() {
 ```
 
 **输出**：
+
 ```json
 [
   {
@@ -144,19 +146,111 @@ int main() {
 }
 ```
 
+### 编译期反射
+
+```c++
+struct Address {
+    std::string country;
+    std::string province;
+
+    REFLECT(country, province)
+};
+
+struct Student {
+    std::string name;
+    int         age{0};
+    int         sex{0};
+    Address     address;
+
+    //    REFLECT(name, age, sex, address)
+};
+
+REFLECT_TYPE(Student, name, age, sex, address)
+
+template <class T, class N>
+struct Baby {
+    T name{};
+    N hungry{};
+};
+
+REFLECT_TYPE_TEMPLATED(((Baby<T, N>), class T, class N), name, hungry)
+
+std::cout << "\n10.反射注册展示" << std::endl;
+
+{
+    std::cout << "\n 普通嵌套类型" << std::endl;
+    Student student;
+    student.name             = "Ping";
+    student.age              = 23;
+    student.sex              = 1;
+    student.address.province = "chengdu";
+    student.address.country  = "china";
+
+    std::string data = ccjson::reflect::serialize(student).toString();
+    std::cout << data << std::endl;
+
+    // 反射序列化
+    student = ccjson::reflect::deserialize<Student>(data);
+    std::cout << ccjson::reflect::serialize(student) << std::endl;
+}
+
+{
+    std::cout << "\n 模板嵌套类型" << std::endl;
+    Class c;
+    c.room = 1;
+    for (int i = 0; i < 5; ++i) {
+        Person alice;
+        alice.name              = "name" + std::to_string(i);
+        alice.age               = i * 10;
+        alice.is_student        = true;
+        alice.hobbies           = {"reading", "gaming", "coding"};
+        alice.scores            = {95, 88, 92};
+        alice.contacts["email"] = "alice@example.com";
+        alice.contacts["phone"] = "123-456-7890";
+        c.students.emplace_back(alice);
+    }
+
+    std::string bin = ccjson::reflect::serialize(c).toString();
+    std::cout << bin << std::endl;
+    auto o = ccjson::reflect::deserialize<Class>(bin);
+    std::cout << ccjson::reflect::serialize(o).toString() << std::endl;
+}
+
+{
+    std::cout << "\n 体外模板类型" << std::endl;
+    Baby<int, float>        baby1{1, 1.2};
+    Baby<std::string, bool> baby2{"baby2", false};
+
+    std::string bin1 = ccjson::reflect::serialize(baby1).toString();
+    std::cout << bin1 << std::endl;
+
+    baby1 = ccjson::reflect::deserialize<decltype(baby1)>(bin1);
+    std::cout << ccjson::reflect::serialize(baby1).toString() << std::endl;
+
+    std::string bin2 = ccjson::reflect::serialize(baby2).toString();
+    std::cout << bin2 << std::endl;
+
+    baby2 = ccjson::reflect::deserialize<decltype(baby2)>(bin2);
+    std::cout << ccjson::reflect::serialize(baby2).toString() << std::endl;
+}
+```
+
 ## API 亮点
 
 ### `JsonValue` 类
+
 - 支持所有 JSON 类型的构造函数（空值、布尔值、数字、字符串、数组、对象）。
 - 操作符：`[]` 用于访问元素，`=` 用于赋值。
 - 方法：`get<T>`、`set`、`push_back`、`toString`、`type`、`isNull` 等。
 - const 迭代器：`begin()` 和 `end()` 用于遍历数组和对象。
 
 ### `JsonParser` 类
+
 - `parse`：解析 JSON 字符串，支持自定义选项。
 - `stringify`：将 `JsonValue` 序列化为 JSON 字符串，支持可选缩进。
 
 ### 异常
+
 - `JsonException`：通用 JSON 错误（如类型不匹配）。
 - `JsonParseException`：解析错误，包含位置信息。
 

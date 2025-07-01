@@ -9,8 +9,8 @@
 #include <vector>
 
 #ifdef _WIN32
-#    include <windows.h>  // 该头文件一定要在psapi.h前
 #    include <psapi.h>
+#    include <windows.h>  // 该头文件一定要在psapi.h前
 #else
 #    include <sys/resource.h>
 #endif
