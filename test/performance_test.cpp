@@ -9,8 +9,8 @@
 #include <vector>
 
 #ifdef _WIN32
-#    include <psapi.h>
 #    include <windows.h>  // 该头文件一定要在psapi.h前
+#    include <psapi.h>
 #else
 #    include <sys/resource.h>
 #endif
@@ -360,7 +360,8 @@ void test_ccjson_memory_usage(const std::string& json_str) {
 void test_nlohmann_memory_usage(const std::string& json_str) {
     std::cout << "Testing nlohmann/json memory usage..." << std::endl;
 
-    json        value  = json::parse(json_str);
+    json value = json::parse(json_str);
+
     std::string result = value.dump();
 
     std::cout << "Original JSON size: " << json_str.size() << " bytes" << std::endl;

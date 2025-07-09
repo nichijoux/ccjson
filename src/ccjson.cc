@@ -8,7 +8,7 @@ namespace ccjson {
 
 JsonValue::JsonValue(const JsonValue& other) : m_type(other.m_type) {
     switch (m_type) {
-        case JsonType::Null:
+        case JsonType::Null: break;
         case JsonType::Boolean: m_value.boolean = other.m_value.boolean; break;
         case JsonType::Integer: m_value.iNumber = other.m_value.iNumber; break;
         case JsonType::Double: m_value.dNumber = other.m_value.dNumber; break;
@@ -29,7 +29,7 @@ JsonValue& JsonValue::operator=(const JsonValue& other) {
         destroyValue();
         m_type = other.m_type;
         switch (m_type) {
-            case JsonType::Null:
+            case JsonType::Null: break;
             case JsonType::Boolean: m_value.boolean = other.m_value.boolean; break;
             case JsonType::Integer: m_value.iNumber = other.m_value.iNumber; break;
             case JsonType::Double: m_value.dNumber = other.m_value.dNumber; break;
@@ -85,7 +85,7 @@ JsonValue::operator bool() const {
 
 JsonValue::operator int16_t() const {
     if (!isNumber()) {
-        throw JsonException("Cannot convert to int");
+        throw JsonException("Cannot convert to int16_t");
     }
     if (m_type == JsonType::Integer) {
         return static_cast<int16_t>(m_value.iNumber);
@@ -95,7 +95,7 @@ JsonValue::operator int16_t() const {
 
 JsonValue::operator int32_t() const {
     if (!isNumber()) {
-        throw JsonException("Cannot convert to int");
+        throw JsonException("Cannot convert to int32_t");
     }
     if (m_type == JsonType::Integer) {
         return static_cast<int32_t>(m_value.iNumber);
@@ -105,7 +105,7 @@ JsonValue::operator int32_t() const {
 
 JsonValue::operator int64_t() const {
     if (!isNumber()) {
-        throw JsonException("Cannot convert to int");
+        throw JsonException("Cannot convert to int64_t");
     }
     if (m_type == JsonType::Integer) {
         return m_value.iNumber;
@@ -115,7 +115,7 @@ JsonValue::operator int64_t() const {
 
 JsonValue::operator float() const {
     if (!isNumber()) {
-        throw JsonException("Cannot convert to double");
+        throw JsonException("Cannot convert to float");
     }
     if (m_type == JsonType::Double) {
         return static_cast<float>(m_value.dNumber);
@@ -172,7 +172,7 @@ JsonValue JsonParser::parse(std::string_view json, uint8_t option) {
     return result;
 }
 
-JsonValue JsonParser::parseValue(std::string_view json, size_t& position, uint8_t option) {
+JsonValue JsonParser::parseValue(const std::string_view& json, size_t& position, uint8_t option) {
     // 跳过无用字符
     SKIP_USELESS_CHAR(json, position);
     // 范围检测
@@ -203,7 +203,7 @@ JsonValue JsonParser::parseValue(std::string_view json, size_t& position, uint8_
     }
 }
 
-JsonValue JsonParser::parseNull(std::string_view json, size_t& position) {
+JsonValue JsonParser::parseNull(const std::string_view& json, size_t& position) {
     // 当前字符一定为n
     // json[pos] - json[pos + 3]
     if (json.substr(position, 4) != "null") {
@@ -213,7 +213,7 @@ JsonValue JsonParser::parseNull(std::string_view json, size_t& position) {
     return nullptr;
 }
 
-JsonValue JsonParser::parseBoolean(std::string_view json, size_t& position) {
+JsonValue JsonParser::parseBoolean(const std::string_view& json, size_t& position) {
     // 当前字符一定为t或f
     if (json.substr(position, 4) == "true") {
         position += 4;
@@ -225,7 +225,7 @@ JsonValue JsonParser::parseBoolean(std::string_view json, size_t& position) {
     throw JsonParseException("Expected 'true' or 'false'", position);
 }
 
-JsonValue JsonParser::parseNumber(std::string_view json, size_t& position) {
+JsonValue JsonParser::parseNumber(const std::string_view& json, size_t& position) {
     // 解析数字,数字格式为-?(0|[1-9]\d*)(\.\d+)?([eE][+-]?\d+)?
     size_t start     = position;
     bool   isInteger = true;  // 假设是整数，除非发现小数点或指数
@@ -305,7 +305,7 @@ JsonValue JsonParser::parseNumber(std::string_view json, size_t& position) {
     }
 }
 
-JsonValue JsonParser::parseString(std::string_view json, size_t& position, uint8_t option) {
+JsonValue JsonParser::parseString(const std::string_view& json, size_t& position, uint8_t option) {
     // 当前字符串一定为"
     // 跳过开头的"
     position++;
@@ -490,7 +490,7 @@ JsonValue JsonParser::parseString(std::string_view json, size_t& position, uint8
     throw JsonParseException("Unexpected end of string", position);
 }
 
-JsonValue JsonParser::parseArray(std::string_view json, size_t& position, uint8_t option) {
+JsonValue JsonParser::parseArray(const std::string_view& json, size_t& position, uint8_t option) {
     // 当前字符一定为[
     JsonArray result;
     // 跳过[
@@ -531,7 +531,7 @@ JsonValue JsonParser::parseArray(std::string_view json, size_t& position, uint8_
     }
 }
 
-JsonValue JsonParser::parseObject(std::string_view json, size_t& position, uint8_t option) {
+JsonValue JsonParser::parseObject(const std::string_view& json, size_t& position, uint8_t option) {
     // 当前字符一定为{
     JsonObject object;
     position++;

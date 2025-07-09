@@ -90,7 +90,7 @@ struct Address {
     REFLECT(country, province)
 };
 
-//REFLECT_TYPE(Address,country, province)
+// REFLECT_TYPE(Address,country, province)
 
 struct Student {
     std::string name;
