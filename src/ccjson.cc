@@ -141,7 +141,7 @@ JsonValue::operator std::string() const {
 }
 
 std::string JsonValue::toString(int indent) const {
-    return JsonParser::stringify(*this, indent);
+    return parser::stringify(*this, indent);
 }
 
 void JsonValue::destroyValue() noexcept {
@@ -161,18 +161,74 @@ void JsonValue::destroyValue() noexcept {
         }                                                                                          \
     } while (false)
 
-JsonValue JsonParser::parse(std::string_view json, uint8_t option) {
-    size_t    position = 0;
-    JsonValue result   = parseValue(json, position, option);
-    SKIP_USELESS_CHAR(json, position);
-    // 按道理现在应该不存在json数据了
-    if (position != json.size()) {
-        throw JsonParseException("Unexpected content after JSON value", position);
-    }
-    return result;
-}
+/**
+ * @brief 解析 JSON 值的辅助函数。
+ * @param json 输入 JSON 字符串。
+ * @param position 当前解析位置（输入输出参数）
+ * @param option 解析选项。
+ * @return 解析后的 JSON 值。
+ * @exception JsonParseException 如果解析失败，抛异常出异常。
+ */
+static JsonValue parseValue(const std::string_view& json, size_t& position, uint8_t option);
 
-JsonValue JsonParser::parseValue(const std::string_view& json, size_t& position, uint8_t option) {
+/**
+ * @brief 解析空值（null）
+ * @param json 输入 JSON 字符串。
+ * @param position 当前解析位置（输入输出参数）
+ * @return 表示空值的 JsonValue。
+ * @exception JsonParseException 如果解析失败，抛出异常。
+ */
+static JsonValue parseNull(const std::string_view& json, size_t& position);
+
+/**
+ * @brief 解析布尔值（true 或 false）
+ * @param json 输入 JSON 字符串。
+ * @param position 当前解析位置（输入输出参数）
+ * @return 表示布尔值的 JsonValue。
+ * @exception JsonParseException 如果解析失败，抛出异常。
+ */
+static JsonValue parseBoolean(const std::string_view& json, size_t& position);
+
+/**
+ * @brief 解析数值（整数或浮点数）
+ * @param json 输入 JSON 字符串。
+ * @param position 当前解析位置（输入输出参数）
+ * @return 表示数值的 JsonValue。
+ * @exception JsonParseException 如果数值格式无效，抛出异常。
+ */
+static JsonValue parseNumber(const std::string_view& json, size_t& position);
+
+/**
+ * @brief 解析字符串。
+ * @param json 输入 JSON 字符串。
+ * @param position 当前解析位置（输入输出参数）
+ * @param option 解析选项。
+ * @return 表示字符串的 JsonValue。
+ * @exception JsonParseException 如果字符串格式无效，抛出异常。
+ */
+static JsonValue parseString(const std::string_view& json, size_t& position, uint8_t option);
+
+/**
+ * @brief 解析数组。
+ * @param json 输入 JSON 字符串。
+ * @param position 当前解析位置（输入输出参数）
+ * @param option 解析选项。
+ * @return 表示数组的 JsonValue。
+ * @exception JsonParseException 如果数组格式无效，抛出异常。
+ */
+static JsonValue parseArray(const std::string_view& json, size_t& position, uint8_t option);
+
+/**
+ * @brief 解析对象。
+ * @param json 输入 JSON 字符串。
+ * @param position 当前解析位置（输入输出参数）
+ * @param option 解析选项。
+ * @return 表示对象的 JsonValue。
+ * @exception JsonParseException 如果对象格式无效，抛出异常。
+ */
+static JsonValue parseObject(const std::string_view& json, size_t& position, uint8_t option);
+
+JsonValue parseValue(const std::string_view& json, size_t& position, uint8_t option) {
     // 跳过无用字符
     SKIP_USELESS_CHAR(json, position);
     // 范围检测
@@ -203,7 +259,7 @@ JsonValue JsonParser::parseValue(const std::string_view& json, size_t& position,
     }
 }
 
-JsonValue JsonParser::parseNull(const std::string_view& json, size_t& position) {
+JsonValue parseNull(const std::string_view& json, size_t& position) {
     // 当前字符一定为n
     // json[pos] - json[pos + 3]
     if (json.substr(position, 4) != "null") {
@@ -213,7 +269,7 @@ JsonValue JsonParser::parseNull(const std::string_view& json, size_t& position) 
     return nullptr;
 }
 
-JsonValue JsonParser::parseBoolean(const std::string_view& json, size_t& position) {
+JsonValue parseBoolean(const std::string_view& json, size_t& position) {
     // 当前字符一定为t或f
     if (json.substr(position, 4) == "true") {
         position += 4;
@@ -225,7 +281,7 @@ JsonValue JsonParser::parseBoolean(const std::string_view& json, size_t& positio
     throw JsonParseException("Expected 'true' or 'false'", position);
 }
 
-JsonValue JsonParser::parseNumber(const std::string_view& json, size_t& position) {
+JsonValue parseNumber(const std::string_view& json, size_t& position) {
     // 解析数字,数字格式为-?(0|[1-9]\d*)(\.\d+)?([eE][+-]?\d+)?
     size_t start     = position;
     bool   isInteger = true;  // 假设是整数，除非发现小数点或指数
@@ -305,7 +361,7 @@ JsonValue JsonParser::parseNumber(const std::string_view& json, size_t& position
     }
 }
 
-JsonValue JsonParser::parseString(const std::string_view& json, size_t& position, uint8_t option) {
+JsonValue parseString(const std::string_view& json, size_t& position, uint8_t option) {
     // 当前字符串一定为"
     // 跳过开头的"
     position++;
@@ -398,7 +454,7 @@ JsonValue JsonParser::parseString(const std::string_view& json, size_t& position
                     break;
                 }
                 case 'x': {
-                    if (option & ENABLE_PARSE_X_ESCAPE_SEQUENCE) {
+                    if (option & parser::ENABLE_PARSE_X_ESCAPE_SEQUENCE) {
                         // 收集所有连续的 \xHH 字节
                         std::vector<uint8_t> utf8Bytes;
                         while (position + 2 < json.size()) {
@@ -472,7 +528,7 @@ JsonValue JsonParser::parseString(const std::string_view& json, size_t& position
                     break;
                 }
                 case '0': {
-                    if (option & ENABLE_PARSE_0_ESCAPE_SEQUENCE) {
+                    if (option & parser::ENABLE_PARSE_0_ESCAPE_SEQUENCE) {
                         // \0 转为 \u0000
                         result += "\\u0000";
                     } else {
@@ -490,7 +546,7 @@ JsonValue JsonParser::parseString(const std::string_view& json, size_t& position
     throw JsonParseException("Unexpected end of string", position);
 }
 
-JsonValue JsonParser::parseArray(const std::string_view& json, size_t& position, uint8_t option) {
+JsonValue parseArray(const std::string_view& json, size_t& position, uint8_t option) {
     // 当前字符一定为[
     JsonArray result;
     // 跳过[
@@ -531,7 +587,7 @@ JsonValue JsonParser::parseArray(const std::string_view& json, size_t& position,
     }
 }
 
-JsonValue JsonParser::parseObject(const std::string_view& json, size_t& position, uint8_t option) {
+JsonValue parseObject(const std::string_view& json, size_t& position, uint8_t option) {
     // 当前字符一定为{
     JsonObject object;
     position++;
@@ -580,18 +636,108 @@ JsonValue JsonParser::parseObject(const std::string_view& json, size_t& position
     }
 }
 
+namespace parser {
+    JsonValue parse(std::string_view json, uint8_t option) {
+        size_t    position = 0;
+        JsonValue result   = parseValue(json, position, option);
+        SKIP_USELESS_CHAR(json, position);
+        // 按道理现在应该不存在json数据了
+        if (position != json.size()) {
+            throw JsonParseException("Unexpected content after JSON value", position);
+        }
+        return result;
+    }
+}  // namespace parser
+
 #undef SKIP_USELESS_CHAR
 
-std::string JsonParser::stringify(const JsonValue& value, int indent) {
-    std::ostringstream oss;
-    stringifyValue(value, oss, indent, 0);
-    return oss.str();
-}
+/**
+ * @brief 序列化 JSON 值到输出流。
+ * @param value 要序列化的 JSON 值。
+ * @param oss 输出字符串流。
+ * @param indent 缩进空格数。
+ * @param level 当前缩进层级。
+ */
+static void stringifyValue(const JsonValue& value, std::ostringstream& oss, int indent, int level);
 
-void JsonParser::stringifyValue(const JsonValue&    value,
-                                std::ostringstream& oss,
-                                int                 indent,
-                                int                 level) {
+/**
+ * @brief 序列化空值到输出流。
+ * @param value JSON 值（空值）
+ * @param oss 输出字符串流。
+ * @param indent 缩进空格数。
+ * @param level 当前缩进层级。
+ */
+inline static void
+stringifyNull(const JsonValue& value, std::ostringstream& oss, int indent, int level);
+
+/**
+ * @brief 序列化布尔值到输出流。
+ * @param value JSON 值（布尔值）
+ * @param oss 输出字符串流。
+ * @param indent 缩进空格数。
+ * @param level 当前缩进层级。
+ */
+inline static void
+stringifyBoolean(const JsonValue& value, std::ostringstream& oss, int indent, int level);
+
+/**
+ * @brief 序列化整数值到输出流。
+ * @param value JSON 值（整数）
+ * @param oss 输出字符串流。
+ * @param indent 缩进空格数。
+ * @param level 当前缩进层级。
+ * @exception JsonException 如果数值无效（如无穷大或 NaN），抛出异常。
+ */
+inline static void
+stringifyInteger(const JsonValue& value, std::ostringstream& oss, int indent, int level);
+
+/**
+ * @brief 序列化浮点数值到输出流。
+ * @param value JSON 值（浮点数）
+ * @param oss 输出字符串流。
+ * @param indent 缩进空格数。
+ * @param level 当前缩进层级。
+ * @exception JsonException 如果数值无效（如无穷大或 NaN），抛出异常。
+ */
+inline static void
+stringifyDouble(const JsonValue& value, std::ostringstream& oss, int indent, int level);
+
+/**
+ * @brief 序列化字符串值到输出流。
+ * @param value JSON 值（字符串）
+ * @param oss 输出字符串流。
+ * @param indent 缩进空格数。
+ * @param level 当前缩进层级。
+ */
+inline static void
+stringifyString(const JsonValue& value, std::ostringstream& oss, int indent, int level);
+
+/**
+ * @brief 序列化字符串到输出流（处理转义字符）
+ * @param value 字符串值。
+ * @param oss 输出字符串流。
+ */
+static void stringifyString(const std::string& value, std::ostringstream& oss);
+
+/**
+ * @brief 序列化数组到输出流。
+ * @param value JSON 值（数组）
+ * @param oss 输出字符串流。
+ * @param indent 缩进空格数。
+ * @param level 当前缩进层级。
+ */
+static void stringifyArray(const JsonValue& value, std::ostringstream& oss, int indent, int level);
+
+/**
+ * @brief 序列化对象到输出流。
+ * @param value JSON 值（对象）
+ * @param oss 输出字符串流。
+ * @param indent 缩进空格数。
+ * @param level 当前缩进层级。
+ */
+static void stringifyObject(const JsonValue& value, std::ostringstream& oss, int indent, int level);
+
+void stringifyValue(const JsonValue& value, std::ostringstream& oss, int indent, int level) {
     // 根据类型调用不同的stringify
 #define STRINGIFY(type)                                                                            \
     case JsonType::type: return stringify##type(value, oss, indent, level)
@@ -607,21 +753,15 @@ void JsonParser::stringifyValue(const JsonValue&    value,
 #undef STRINGIFY
 }
 
-void JsonParser::stringifyNull(const ccjson::JsonValue& value, std::ostringstream& oss, int, int) {
+void stringifyNull(const ccjson::JsonValue& value, std::ostringstream& oss, int, int) {
     oss << "null";
 }
 
-void JsonParser::stringifyBoolean(const ccjson::JsonValue& value,
-                                  std::ostringstream&      oss,
-                                  int,
-                                  int) {
+void stringifyBoolean(const ccjson::JsonValue& value, std::ostringstream& oss, int, int) {
     oss << (value.get<bool>() ? "true" : "false");
 }
 
-void JsonParser::stringifyInteger(const ccjson::JsonValue& value,
-                                  std::ostringstream&      oss,
-                                  int,
-                                  int) {
+void stringifyInteger(const ccjson::JsonValue& value, std::ostringstream& oss, int, int) {
     auto num = value.get<int64_t>();
     if (std::isfinite(num)) {
         oss << num;
@@ -630,26 +770,23 @@ void JsonParser::stringifyInteger(const ccjson::JsonValue& value,
     }
 }
 
-void JsonParser::stringifyDouble(const ccjson::JsonValue& value,
-                                 std::ostringstream&      oss,
-                                 int,
-                                 int) {
+void stringifyDouble(const ccjson::JsonValue& value, std::ostringstream& oss, int, int) {
     auto num = value.get<double>();
     if (std::isfinite(num)) {
-        oss << num;
+        oss << std::to_string(num);
     } else {
         throw JsonException("Cannot stringify infinite or NaN number");
     }
 }
 
-void JsonParser::stringifyString(const ccjson::JsonValue& value,
-                                 std::ostringstream&      oss,
-                                 int                      indent,
-                                 int                      level) {
+void stringifyString(const ccjson::JsonValue& value,
+                     std::ostringstream&      oss,
+                     int                      indent,
+                     int                      level) {
     stringifyString(value.get<std::string>(), oss);
 }
 
-void JsonParser::stringifyString(const std::string& value, std::ostringstream& oss) {
+void stringifyString(const std::string& value, std::ostringstream& oss) {
     oss << '"';
     for (char c : value) {
         switch (c) {
@@ -666,10 +803,10 @@ void JsonParser::stringifyString(const std::string& value, std::ostringstream& o
     oss << '"';
 }
 
-void JsonParser::stringifyArray(const ccjson::JsonValue& value,
-                                std::ostringstream&      oss,
-                                int                      indent,
-                                int                      level) {
+void stringifyArray(const ccjson::JsonValue& value,
+                    std::ostringstream&      oss,
+                    int                      indent,
+                    int                      level) {
     const auto& array = value.get<JsonArray>();
     if (array.empty()) {
         oss << "[]";
@@ -692,10 +829,10 @@ void JsonParser::stringifyArray(const ccjson::JsonValue& value,
     oss << "]";
 }
 
-void JsonParser::stringifyObject(const ccjson::JsonValue& value,
-                                 std::ostringstream&      oss,
-                                 int                      indent,
-                                 int                      level) {
+void stringifyObject(const ccjson::JsonValue& value,
+                     std::ostringstream&      oss,
+                     int                      indent,
+                     int                      level) {
     const auto& object = value.get<JsonObject>();
     if (object.empty()) {
         oss << "{}";
@@ -722,6 +859,14 @@ void JsonParser::stringifyObject(const ccjson::JsonValue& value,
     oss << '}';
 }
 
+namespace parser {
+    std::string stringify(const JsonValue& value, int indent) {
+        std::ostringstream oss;
+        stringifyValue(value, oss, indent, 0);
+        return oss.str();
+    }
+}  // namespace parser
+
 JsonValue::ConstIterator::value_type& JsonValue::ConstIterator::operator*() const {
     return std::visit(
         [this](const auto& it) -> reference {
@@ -741,7 +886,7 @@ std::string JsonValue::ConstIterator::key() const {
     return std::visit(
         [](const auto& it) -> std::string {
             using T = std::decay_t<decltype(it)>;
-            if constexpr (std::is_same_v<T, JsonObject ::const_iterator>) {
+            if constexpr (std::is_same_v<T, JsonObject::const_iterator>) {
                 return it->first;
             }
             throw JsonException("cannot use key() for non-Object iterators");

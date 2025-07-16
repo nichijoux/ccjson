@@ -9,8 +9,8 @@
 #include <vector>
 
 #ifdef _WIN32
-#    include <windows.h>  // 该头文件一定要在psapi.h前
 #    include <psapi.h>
+#    include <windows.h>  // 该头文件一定要在psapi.h前
 #else
 #    include <sys/resource.h>
 #endif
@@ -228,7 +228,7 @@ void test_ccjson_parse_performance(const std::string& json_str, int iterations) 
     auto start = std::chrono::high_resolution_clock::now();
 
     for (int i = 0; i < iterations; ++i) {
-        JsonValue value = JsonParser::parse(json_str);
+        JsonValue value = parser::parse(json_str);
     }
 
     auto end      = std::chrono::high_resolution_clock::now();
@@ -268,7 +268,7 @@ void test_ccjson_stringify_performance(const JsonValue& value, int iterations) {
     auto start = std::chrono::high_resolution_clock::now();
 
     for (int i = 0; i < iterations; ++i) {
-        std::string json_str = JsonParser::stringify(value);
+        std::string json_str = parser::stringify(value);
     }
 
     auto end      = std::chrono::high_resolution_clock::now();
@@ -308,8 +308,8 @@ void test_ccjson_roundtrip_performance(const std::string& json_str, int iteratio
     auto start = std::chrono::high_resolution_clock::now();
 
     for (int i = 0; i < iterations; ++i) {
-        JsonValue   value  = JsonParser::parse(json_str);
-        std::string result = JsonParser::stringify(value);
+        JsonValue   value  = parser::parse(json_str);
+        std::string result = parser::stringify(value);
     }
 
     auto end      = std::chrono::high_resolution_clock::now();
@@ -346,7 +346,7 @@ void test_nlohmann_roundtrip_performance(const std::string& json_str, int iterat
 void test_ccjson_memory_usage(const std::string& json_str) {
     std::cout << "Testing ccjson memory usage..." << std::endl;
 
-    JsonValue   value  = JsonParser::parse(json_str);
+    JsonValue   value  = parser::parse(json_str);
     std::string result = value.toString();
 
     std::cout << "Original JSON size: " << json_str.size() << " bytes" << std::endl;
@@ -399,7 +399,7 @@ int main() {
 
         // 测试序列化性能
         std::cout << "\n--- Stringify Performance ---" << std::endl;
-        JsonValue ccjson_value   = JsonParser::parse(json_str);
+        JsonValue ccjson_value   = parser::parse(json_str);
         json      nlohmann_value = json::parse(json_str);
         test_ccjson_stringify_performance(ccjson_value, iterations);
         test_nlohmann_stringify_performance(nlohmann_value, iterations);

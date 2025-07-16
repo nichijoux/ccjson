@@ -304,7 +304,7 @@ class JsonValue {
         m_value.string = new JsonString(value);
     }
 
-    JsonValue(std::string&& value) noexcept : m_type(JsonType::String) {
+    JsonValue(JsonString&& value) noexcept : m_type(JsonType::String) {
         m_value.string = new JsonString(std::move(value));
     }
 
@@ -502,6 +502,18 @@ class JsonValue {
 
     /**
      * @brief 获取字符串值的引用
+     * @return 字符串值的引用
+     * @exception JsonException 如果当前类型不是字符串，抛出异常
+     */
+    inline JsonString& asString() {
+        if (m_type != JsonType::String) {
+            throw JsonException("not a string");
+        }
+        return *m_value.string;
+    }
+
+    /**
+     * @brief 获取字符串值的引用
      * @return 字符串值的常量引用
      * @exception JsonException 如果当前类型不是字符串，抛出异常
      */
@@ -514,6 +526,18 @@ class JsonValue {
 
     /**
      * @brief 获取数组值的引用
+     * @return 数组值的引用
+     * @exception JsonException 如果当前类型不是数组，抛出异常
+     */
+    inline JsonArray& asArray() {
+        if (m_type != JsonType::Array) {
+            throw JsonException("not an array");
+        }
+        return *m_value.array;
+    }
+
+    /**
+     * @brief 获取数组值的引用
      * @return 数组值的常量引用
      * @exception JsonException 如果当前类型不是数组，抛出异常
      */
@@ -522,6 +546,18 @@ class JsonValue {
             throw JsonException("not an array");
         }
         return *m_value.array;
+    }
+
+    /**
+     * @brief 获取对象值的引用
+     * @return 对象值的引用
+     * @exception JsonException 如果当前类型不是对象，抛出异常
+     */
+    inline JsonObject& asObject() {
+        if (m_type != JsonType::Object) {
+            throw JsonException("not an object");
+        }
+        return *m_value.object;
     }
 
     /**
@@ -1026,24 +1062,22 @@ class JsonValue {
     JsonType m_type;  ///< JSON 数据类型
     union
     {
-        bool                              boolean;  ///< 布尔值
-        int64_t                           iNumber;  ///< 整数值
-        double                            dNumber;  ///< 浮点值
-        std::string*                      string;   ///< 字符串指针
-        std::vector<JsonValue>*           array;    ///< 数组指针
-        std::map<std::string, JsonValue>* object;   ///< 对象指针
-    } m_value{};                                    ///< 存储值的联合体
-};  // namespace ccjson
+        bool        boolean;  ///< 布尔值
+        int64_t     iNumber;  ///< 整数值
+        double      dNumber;  ///< 浮点值
+        JsonString* string;   ///< 字符串指针
+        JsonArray*  array;    ///< 数组指针
+        JsonObject* object;   ///< 对象指针
+    } m_value{};              ///< 存储值的联合体
+};
 
 /**
- * @class JsonParser
- * @brief JSON 字符串解析和序列化的工具类。
+ * @brief JSON 字符串解析和序列化。
  *
  * 提供静态方法用于将 JSON 字符串解析为 JsonValue 对象，以及将 JsonValue 对象序列化为 JSON 字符串。
  * 支持扩展解析选项（如 \\x 和 \\0 转义序列）。
  */
-class JsonParser {
-  public:
+namespace parser {
     /**
      * @enum ParserOption
      * @brief JSON 解析选项枚举。
@@ -1056,7 +1090,6 @@ class JsonParser {
         ENABLE_PARSE_0_ESCAPE_SEQUENCE = 1 << 1  ///< 启用 \0 转义序列解析
     };
 
-  public:
     /**
      * @brief 从 JSON 字符串解析为 JsonValue。
      * @param json JSON 输入字符串。
@@ -1064,7 +1097,7 @@ class JsonParser {
      * @return 解析结果的 JsonValue 对象。
      * @exception JsonParseException 如果解析失败，抛出异常，包含错误信息和位置。
      */
-    static JsonValue parse(std::string_view json, uint8_t option = DISABLE_EXTENSION);
+    JsonValue parse(std::string_view json, uint8_t option = DISABLE_EXTENSION);
 
     /**
      * @brief 将 JsonValue 序列化为 JSON 字符串。
@@ -1073,166 +1106,8 @@ class JsonParser {
      * @return 序列化的 JSON 字符串。
      * @exception JsonException 如果序列化失败（如数值无效），抛出异常。
      */
-    static std::string stringify(const JsonValue& value, int indent = 0);
-
-  private:
-    /**
-     * @brief 解析 JSON 值的辅助函数。
-     * @param json 输入 JSON 字符串。
-     * @param position 当前解析位置（输入输出参数）
-     * @param option 解析选项。
-     * @return 解析后的 JSON 值。
-     * @exception JsonParseException 如果解析失败，抛异常出异常。
-     */
-    static JsonValue parseValue(const std::string_view& json, size_t& position, uint8_t option);
-
-    /**
-     * @brief 解析空值（null）
-     * @param json 输入 JSON 字符串。
-     * @param position 当前解析位置（输入输出参数）
-     * @return 表示空值的 JsonValue。
-     * @exception JsonParseException 如果解析失败，抛出异常。
-     */
-    static JsonValue parseNull(const std::string_view& json, size_t& position);
-
-    /**
-     * @brief 解析布尔值（true 或 false）
-     * @param json 输入 JSON 字符串。
-     * @param position 当前解析位置（输入输出参数）
-     * @return 表示布尔值的 JsonValue。
-     * @exception JsonParseException 如果解析失败，抛出异常。
-     */
-    static JsonValue parseBoolean(const std::string_view& json, size_t& position);
-
-    /**
-     * @brief 解析数值（整数或浮点数）
-     * @param json 输入 JSON 字符串。
-     * @param position 当前解析位置（输入输出参数）
-     * @return 表示数值的 JsonValue。
-     * @exception JsonParseException 如果数值格式无效，抛出异常。
-     */
-    static JsonValue parseNumber(const std::string_view& json, size_t& position);
-
-    /**
-     * @brief 解析字符串。
-     * @param json 输入 JSON 字符串。
-     * @param position 当前解析位置（输入输出参数）
-     * @param option 解析选项。
-     * @return 表示字符串的 JsonValue。
-     * @exception JsonParseException 如果字符串格式无效，抛出异常。
-     */
-    static JsonValue parseString(const std::string_view& json, size_t& position, uint8_t option);
-
-    /**
-     * @brief 解析数组。
-     * @param json 输入 JSON 字符串。
-     * @param position 当前解析位置（输入输出参数）
-     * @param option 解析选项。
-     * @return 表示数组的 JsonValue。
-     * @exception JsonParseException 如果数组格式无效，抛出异常。
-     */
-    static JsonValue parseArray(const std::string_view& json, size_t& position, uint8_t option);
-
-    /**
-     * @brief 解析对象。
-     * @param json 输入 JSON 字符串。
-     * @param position 当前解析位置（输入输出参数）
-     * @param option 解析选项。
-     * @return 表示对象的 JsonValue。
-     * @exception JsonParseException 如果对象格式无效，抛出异常。
-     */
-    static JsonValue parseObject(const std::string_view& json, size_t& position, uint8_t option);
-
-  private:
-    /**
-     * @brief 序列化 JSON 值到输出流。
-     * @param value 要序列化的 JSON 值。
-     * @param oss 输出字符串流。
-     * @param indent 缩进空格数。
-     * @param level 当前缩进层级。
-     */
-    static void
-    stringifyValue(const JsonValue& value, std::ostringstream& oss, int indent, int level);
-
-    /**
-     * @brief 序列化空值到输出流。
-     * @param value JSON 值（空值）
-     * @param oss 输出字符串流。
-     * @param indent 缩进空格数。
-     * @param level 当前缩进层级。
-     */
-    inline static void
-    stringifyNull(const JsonValue& value, std::ostringstream& oss, int indent, int level);
-
-    /**
-     * @brief 序列化布尔值到输出流。
-     * @param value JSON 值（布尔值）
-     * @param oss 输出字符串流。
-     * @param indent 缩进空格数。
-     * @param level 当前缩进层级。
-     */
-    inline static void
-    stringifyBoolean(const JsonValue& value, std::ostringstream& oss, int indent, int level);
-
-    /**
-     * @brief 序列化整数值到输出流。
-     * @param value JSON 值（整数）
-     * @param oss 输出字符串流。
-     * @param indent 缩进空格数。
-     * @param level 当前缩进层级。
-     * @exception JsonException 如果数值无效（如无穷大或 NaN），抛出异常。
-     */
-    inline static void
-    stringifyInteger(const JsonValue& value, std::ostringstream& oss, int indent, int level);
-
-    /**
-     * @brief 序列化浮点数值到输出流。
-     * @param value JSON 值（浮点数）
-     * @param oss 输出字符串流。
-     * @param indent 缩进空格数。
-     * @param level 当前缩进层级。
-     * @exception JsonException 如果数值无效（如无穷大或 NaN），抛出异常。
-     */
-    inline static void
-    stringifyDouble(const JsonValue& value, std::ostringstream& oss, int indent, int level);
-
-    /**
-     * @brief 序列化字符串值到输出流。
-     * @param value JSON 值（字符串）
-     * @param oss 输出字符串流。
-     * @param indent 缩进空格数。
-     * @param level 当前缩进层级。
-     */
-    inline static void
-    stringifyString(const JsonValue& value, std::ostringstream& oss, int indent, int level);
-
-    /**
-     * @brief 序列化字符串到输出流（处理转义字符）
-     * @param value 字符串值。
-     * @param oss 输出字符串流。
-     */
-    static void stringifyString(const std::string& value, std::ostringstream& oss);
-
-    /**
-     * @brief 序列化数组到输出流。
-     * @param value JSON 值（数组）
-     * @param oss 输出字符串流。
-     * @param indent 缩进空格数。
-     * @param level 当前缩进层级。
-     */
-    static void
-    stringifyArray(const JsonValue& value, std::ostringstream& oss, int indent, int level);
-
-    /**
-     * @brief 序列化对象到输出流。
-     * @param value JSON 值（对象）
-     * @param oss 输出字符串流。
-     * @param indent 缩进空格数。
-     * @param level 当前缩进层级。
-     */
-    static void
-    stringifyObject(const JsonValue& value, std::ostringstream& oss, int indent, int level);
-};
+    std::string stringify(const JsonValue& value, int indent = 0);
+}  // namespace parser
 
 // 容器序列化支持
 
@@ -1309,7 +1184,7 @@ JsonValue toJson(const Map& map) {
  * @note 解析调用JsonParser::parse且不支持任何扩展
  */
 inline JsonValue operator""_json(const char* data, size_t length) {
-    return JsonParser::parse({data, length});
+    return parser::parse({data, length});
 }
 }  // namespace ccjson
 
