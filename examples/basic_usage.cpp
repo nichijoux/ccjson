@@ -358,7 +358,7 @@ void run_examples() {
     {
         std::string s = R"("\uD834\uDD1E")";
         std::cout << "\r10.扩展JSON解析:" << "\n";
-        auto v = JsonParser::parse(s, JsonParser::ENABLE_PARSE_X_ESCAPE_SEQUENCE);
+        auto v = parser::parse(s, parser::ENABLE_PARSE_X_ESCAPE_SEQUENCE);
         std::cout << v << "\n";
         std::ofstream output_file("o.json");
         if (!output_file.is_open()) {

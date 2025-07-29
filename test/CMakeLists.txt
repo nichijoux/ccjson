@@ -9,5 +9,7 @@ else()
     target_link_libraries(performance_test PRIVATE rt)
 endif() 
 
+add_executable(nlohman_file_io nlohman_file_io.cc)
+
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/twitter.json
                ${CMAKE_BINARY_DIR}/test/twitter.json COPYONLY)

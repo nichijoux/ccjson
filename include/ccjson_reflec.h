@@ -667,7 +667,7 @@ T deserialize(const ccjson::JsonValue& root) {
  */
 template <typename T>
 T deserialize(const std::string& json) {
-    return deserialize<T>(ccjson::JsonParser::parse(json));
+    return deserialize<T>(ccjson::parser::parse(json));
 }
 }  // namespace ccjson::reflect
 #endif

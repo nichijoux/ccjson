@@ -8,8 +8,8 @@ target_link_libraries(json_file_io PRIVATE ccjson)
 add_executable(json_to_struct json_to_struct.cpp)
 target_link_libraries(json_to_struct PRIVATE ccjson)
 
-#add_executable(reflect_example reflect_example.cpp)
-#target_link_libraries(reflect_example PRIVATE ccjson)
+add_executable(test_json_suit test_json_suit.cc)
+target_link_libraries(test_json_suit PRIVATE ccjson)
 
 # 复制示例文件到构建目录
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/twitter.json

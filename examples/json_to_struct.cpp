@@ -121,7 +121,7 @@ int main() {
         input_file.close();
 
         // 解析JSON
-        JsonValue json = JsonParser::parse(json_str);
+        JsonValue json = parser::parse(json_str);
 
         // 获取第一个status的用户信息
         if (!json["statuses"].isArray() || json["statuses"].get<JsonArray>().empty()) {
@@ -157,7 +157,7 @@ int main() {
             std::cerr << "Error: Could not open user_output.json for writing" << std::endl;
             return 1;
         }
-        output_file << JsonParser::stringify(json);
+        output_file << parser::stringify(json);
         output_file.close();
 
         std::cout << "\nSuccessfully wrote modified JSON to user_output.json" << std::endl;

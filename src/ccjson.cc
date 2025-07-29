@@ -1,7 +1,9 @@
 #pragma clang diagnostic push
 #pragma ide diagnostic ignored "misc-no-recursion"
 #include "ccjson.h"
+#include <charconv>
 #include <cmath>
+#include <iomanip>
 #include <sstream>
 
 namespace ccjson {
@@ -154,9 +156,16 @@ void JsonValue::destroyValue() noexcept {
     }
 }
 
+/**
+ * @brief 跳过json的无用字符串。
+ * @param str 输入 JSON 字符串。
+ * @param position 当前解析位置（输入输出参数）
+ * @note 不可使用std::isspace,json规范中定义的ws只可为空格,\\t,\\n,\\r
+ */
 #define SKIP_USELESS_CHAR(str, position)                                                           \
     do {                                                                                           \
-        while (position < str.size() && std::isspace(str[position])) {                             \
+        while (position < str.size() && ((str[position]) == ' ' || (str[position]) == '\t' ||      \
+                                         (str[position]) == '\n' || (str[position]) == '\r')) {    \
             ++position;                                                                            \
         }                                                                                          \
     } while (false)
@@ -199,12 +208,28 @@ static JsonValue parseBoolean(const std::string_view& json, size_t& position);
 static JsonValue parseNumber(const std::string_view& json, size_t& position);
 
 /**
+ * @brief 将hex字符串转为char32_t
+ * @param hex 待转换的字符串
+ * @return {unicode码点,是否转换成功}
+ */
+static std::pair<char32_t, bool> hexToChar32t(const std::string_view& hex);
+
+/**
+ * @brief 将Unicode码点转换为UTF-8字符串。
+ * @param codePoint unicode码点。
+ * @param position 当前解析到的json字符串位置。
+ * @return 解析后的unicode字符串
+ * @throw JsonParseException 如果码点大于0x10FFFF，抛出异常。
+ */
+static std::string parseUnicodeString(char32_t codePoint, size_t position);
+
+/**
  * @brief 解析字符串。
  * @param json 输入 JSON 字符串。
  * @param position 当前解析位置（输入输出参数）
  * @param option 解析选项。
  * @return 表示字符串的 JsonValue。
- * @exception JsonParseException 如果字符串格式无效，抛出异常。
+ * @throw JsonParseException 如果字符串格式无效，抛出异常。
  */
 static JsonValue parseString(const std::string_view& json, size_t& position, uint8_t option);
 
@@ -255,7 +280,7 @@ JsonValue parseValue(const std::string_view& json, size_t& position, uint8_t opt
         case '7':
         case '8':
         case '9': return parseNumber(json, position);
-        default: throw JsonParseException("Unexpected character: " + std::to_string(c), position);
+        default: throw JsonParseException("Unexpected character: " + std::string(c, 1), position);
     }
 }
 
@@ -283,13 +308,19 @@ JsonValue parseBoolean(const std::string_view& json, size_t& position) {
 
 JsonValue parseNumber(const std::string_view& json, size_t& position) {
     // 解析数字,数字格式为-?(0|[1-9]\d*)(\.\d+)?([eE][+-]?\d+)?
-    size_t start     = position;
-    bool   isInteger = true;  // 假设是整数，除非发现小数点或指数
+    size_t start = position;
+    // 假设是整数，除非发现小数点或指数
+    bool isInteger = true;
 
-    // 处理负数
-    position += json[start] == '-';
-    bool isNegative = json[start] == '-';
-
+    // 处理正负号
+    if (json[position] == '+' || json[position] == '-') {
+        ++position;
+        if (position < json.size() && json[position] == '.') {
+            throw JsonParseException(
+                "Invalid numeric format: sign ('+'/'-') cannot be immediately followed by '.'",
+                position);
+        }
+    }
     // 处理整数部分（不跳过前导零，仅检查合法性）
     if (json[position] == '0') {
         position++;
@@ -311,12 +342,13 @@ JsonValue parseNumber(const std::string_view& json, size_t& position) {
             throw JsonParseException("Invalid number format, decimal heed at least 1 number",
                                      position);
         }
+        // 跳过数字
         while (position < json.size() && std::isdigit(json[position])) {
             position++;
         }
     }
     // 处理指数
-    if (position < json.size() && json[position] == 'e') {
+    if (position < json.size() && (json[position] == 'e' || json[position] == 'E')) {
         isInteger = false;
         // e 或 E 后跟可选符号（+/-）和至少一个数字（如 1e3 或 2E-5）
         // 处理符号e
@@ -334,31 +366,78 @@ JsonValue parseNumber(const std::string_view& json, size_t& position) {
             position++;
         }
     }
-    std::string numStr(json.substr(start, position - start));
+    std::string raw(json.substr(start, position - start));
     // 将数值转换为数字
-    try {
-        if (isInteger) {
-            // 快速检查：如果字符串过长，直接按 double 处理
-            if (numStr.length() > 20 ||
-                (numStr.length() == 20 &&
-                 numStr > (isNegative ? "-9223372036854775808" : "9223372036854775807"))) {
-                return std::stod(numStr);
+    if (isInteger) {
+        int64_t result = 0;
+        auto [ptr, ec] = std::from_chars(raw.data(), raw.data() + raw.size(), result);
+        if (ec != std::errc() || ptr != raw.data() + raw.size()) {
+            if (ec == std::errc::result_out_of_range) {
+                goto parseDouble;
             }
-
-            // 尝试解析为 int64_t
-            int64_t intValue = std::stoll(numStr);
-            return intValue;
-        } else {
-            // 直接解析为double
-            return std::stod(numStr);
+            throw JsonParseException("Invalid argument: The input is not a valid integer number.",
+                                     start);
         }
-    } catch (const std::out_of_range&) {
-        // 如果整数解析溢出，转为double
-        return std::stod(numStr);
-    } catch (const std::invalid_argument& e) {
-        throw JsonParseException("Invalid number format, because " + std::string(e.what()),
-                                 position);
+        return result;
+    } else {
+    parseDouble:
+        double result  = 0;
+        auto [ptr, ec] = std::from_chars(raw.data(), raw.data() + raw.size(), result);
+        if (ec != std::errc() || ptr != raw.data() + raw.size()) {
+            if (ec == std::errc::result_out_of_range) {
+                throw JsonParseException(
+                    "Result out of range: The parsed value is too large or too small.", start);
+            }
+            throw JsonParseException("Invalid argument: The input is not a valid float number.",
+                                     start);
+        }
+        return result;
     }
+}
+
+std::pair<char32_t, bool> hexToChar32t(const std::string_view& hex) {
+    char32_t result = 0;
+    for (char c : hex) {
+        result = (result << 4);
+        if ('0' <= c && c <= '9') {
+            result += c - '0';
+        } else if ('A' <= c && c <= 'F') {
+            result += c - 'A' + 10;
+        } else if ('a' <= c && c <= 'f') {
+            result += c - 'a' + 10;
+        } else {
+            return {0, false};
+        }
+    }
+    return {result, true};
+}
+
+std::string parseUnicodeString(char32_t codePoint, size_t position) {
+    std::string result;
+    // 根据 Unicode 码点范围，按 UTF-8 规则分段编码：
+    if (codePoint <= 0x007F) {
+        // 0x0000~0x007F (1字节)
+        result.push_back(static_cast<char>(codePoint));
+    } else if (codePoint <= 0x07FF) {
+        // 0x0080~0x07FF (2字节)
+        result.push_back(static_cast<char>(0xC0 | (codePoint >> 6)));
+        result.push_back(static_cast<char>(0x80 | (codePoint & 0x3F)));
+    } else if (codePoint <= 0xFFFF) {
+        // 0x0800~0xFFFF (3字节)
+        result.push_back(static_cast<char>(0xE0 | (codePoint >> 12)));
+        result.push_back(static_cast<char>(0x80 | ((codePoint >> 6) & 0x3F)));
+        result.push_back(static_cast<char>(0x80 | (codePoint & 0x3F)));
+    } else if (codePoint <= 0x10FFFF) {
+        // 0x10000~0x10FFFF (4字节)
+        result.push_back(static_cast<char>(0xF0 | (codePoint >> 18)));
+        result.push_back(static_cast<char>(0x80 | ((codePoint >> 12) & 0x3F)));
+        result.push_back(static_cast<char>(0x80 | ((codePoint >> 6) & 0x3F)));
+        result.push_back(static_cast<char>(0x80 | (codePoint & 0x3F)));
+    } else {
+        throw JsonParseException("Invalid Unicode code point", position);
+    }
+
+    return result;
 }
 
 JsonValue parseString(const std::string_view& json, size_t& position, uint8_t option) {
@@ -366,12 +445,11 @@ JsonValue parseString(const std::string_view& json, size_t& position, uint8_t op
     // 跳过开头的"
     position++;
     JsonString result;
-    result.reserve(32);  // 初始预留空间，避免频繁扩容
     // 读取后面的字符串
     while (position < json.size()) {
         char c = json[position++];
         if (c == '"') {
-            return std::move(result);
+            return result;
         } else if (c == '\\') {
             // 如果c为\,说明遇到了转移字符
             if (position >= json.size()) {
@@ -397,58 +475,36 @@ JsonValue parseString(const std::string_view& json, size_t& position, uint8_t op
                     position += 4;
 
                     // 解析unicode
-                    try {
-                        // 转换为 Unicode 码点
-                        char32_t codePoint = std::stoul(hex.data(), nullptr, 16);
+                    if (auto [codePoint, success] = hexToChar32t(hex); success) {
                         // 检查是否是代理对（Surrogate Pair）
-                        if (codePoint >= 0xD800 && codePoint <= 0xDBFF) {
-                            // 高代理（High Surrogate），需要低代理（Low Surrogate）
+                        if (0xD800 <= codePoint && codePoint <= 0xDBFF) {
+                            // 验证是否存在第二个代理
                             if (position + 6 > json.size() || json[position] != '\\' ||
                                 json[position + 1] != 'u') {
-                                throw JsonParseException("Missing low surrogate in \\u escape",
+                                throw JsonParseException("Missing low surrogate in UTF-16 pair",
                                                          position);
                             }
-                            position += 2;  // 跳过 \u
-
-                            // 解析低代理
-                            char32_t lowSurrogate =
-                                std::stoul(json.substr(position, 4).data(), nullptr, 16);
+                            // 跳过\u
+                            position += 2;
+                            // 计算低代理
+                            auto lowHex = json.substr(position, 4);
                             position += 4;
-
-                            if (lowSurrogate < 0xDC00 || lowSurrogate > 0xDFFF) {
-                                throw JsonParseException("Invalid low surrogate in \\u escape",
+                            if (auto [lowCode, ok] = hexToChar32t(lowHex); ok) {
+                                if (lowCode < 0xDC00 || lowCode > 0xDFFF) {
+                                    throw JsonParseException("Invalid low surrogate in \\u escape",
+                                                             position);
+                                }
+                                // 计算实际码点
+                                codePoint =
+                                    0x10000 + ((codePoint - 0xD800) << 10) + (lowCode - 0xDC00);
+                            } else {
+                                throw JsonParseException("Invalid unicode escape sequence",
                                                          position);
                             }
-
-                            // 计算完整码点
-                            codePoint =
-                                0x10000 + ((codePoint - 0xD800) << 10) + (lowSurrogate - 0xDC00);
-                        } else if (codePoint >= 0xDC00 && codePoint <= 0xDFFF) {
-                            // 单独的低代理（非法）
-                            throw JsonParseException("Unpaired low surrogate in \\u escape",
-                                                     position);
                         }
-                        // 根据 Unicode 码点范围，按 UTF-8 规则分段编码：
-                        if (codePoint <= 0x007F) {
-                            // 0x0000~0x007F (1字节)
-                            result.push_back(static_cast<char>(codePoint));
-                        } else if (codePoint <= 0x07FF) {
-                            // 0x0080~0x07FF (2字节)
-                            result.push_back(static_cast<char>(0xC0 | (codePoint >> 6)));
-                            result.push_back(static_cast<char>(0x80 | (codePoint & 0x3F)));
-                        } else if (codePoint <= 0xFFFF) {
-                            // 0x0800~0xFFFF (3字节)
-                            result.push_back(static_cast<char>(0xE0 | (codePoint >> 12)));
-                            result.push_back(static_cast<char>(0x80 | ((codePoint >> 6) & 0x3F)));
-                            result.push_back(static_cast<char>(0x80 | (codePoint & 0x3F)));
-                        } else {
-                            // 0x10000~0x10FFFF (4字节)
-                            result.push_back(static_cast<char>(0xF0 | (codePoint >> 18)));
-                            result.push_back(static_cast<char>(0x80 | ((codePoint >> 12) & 0x3F)));
-                            result.push_back(static_cast<char>(0x80 | ((codePoint >> 6) & 0x3F)));
-                            result.push_back(static_cast<char>(0x80 | (codePoint & 0x3F)));
-                        }
-                    } catch (...) {
+                        // 解析unicode编码
+                        result += parseUnicodeString(codePoint, position);
+                    } else {
                         throw JsonParseException("Invalid unicode escape sequence", position);
                     }
                     break;
@@ -460,11 +516,9 @@ JsonValue parseString(const std::string_view& json, size_t& position, uint8_t op
                         while (position + 2 < json.size()) {
                             auto hex = json.substr(position, 2);
                             position += 2;
-                            try {
-                                uint8_t byte =
-                                    static_cast<uint8_t>(std::stoul(hex.data(), nullptr, 16));
-                                utf8Bytes.push_back(byte);
-                            } catch (...) {
+                            if (auto [byte, success] = hexToChar32t(hex); success) {
+                                utf8Bytes.push_back(static_cast<uint8_t>(byte));
+                            } else {
                                 throw JsonParseException("Invalid \\x escape sequence", position);
                             }
                             // 检查是否还有下一个 \x
@@ -475,11 +529,10 @@ JsonValue parseString(const std::string_view& json, size_t& position, uint8_t op
                                 break;
                             }
                         }
-
-                        if (utf8Bytes.empty()) {
-                            throw JsonParseException("Empty \\x escape sequence", position);
+                        // \x必须有内容
+                        if (utf8Bytes.empty() || utf8Bytes.size() > 4) {
+                            throw JsonParseException("Invalid \\x escape sequence size", position);
                         }
-
                         // 解码 UTF-8 → Unicode 码点
                         char32_t codePoint = 0;
                         size_t   i         = 0;
@@ -538,6 +591,8 @@ JsonValue parseString(const std::string_view& json, size_t& position, uint8_t op
                 }
                 default: throw JsonParseException("Invalid escape sequence", position);
             }
+        } else if (static_cast<unsigned char>(c) < 0x20) {
+            throw JsonParseException("Control character not allowed in JSON string", position);
         } else {
             result.push_back(c);
         }
@@ -561,10 +616,8 @@ JsonValue parseArray(const std::string_view& json, size_t& position, uint8_t opt
         position++;
         return result;
     }
-    // 预分配空间
-    result.reserve(32);
     // 解析后面的 value
-    while (true) {
+    while (position < json.size()) {
         // 跳过无用字符
         SKIP_USELESS_CHAR(json, position);
         // 解析值
@@ -572,7 +625,7 @@ JsonValue parseArray(const std::string_view& json, size_t& position, uint8_t opt
         // 无用字符
         SKIP_USELESS_CHAR(json, position);
         if (position >= json.size()) {
-            throw JsonParseException("Unexpected end of Array", position);
+            break;
         }
         // 如果遇到了]
         if (json[position] == ']') {
@@ -585,6 +638,7 @@ JsonValue parseArray(const std::string_view& json, size_t& position, uint8_t opt
         }
         position++;
     }
+    throw JsonParseException("Unexpected end of Array", position);
 }
 
 JsonValue parseObject(const std::string_view& json, size_t& position, uint8_t option) {
@@ -603,25 +657,25 @@ JsonValue parseObject(const std::string_view& json, size_t& position, uint8_t op
         return object;
     }
     // 说明存在值
-    while (true) {
+    while (position < json.size()) {
         SKIP_USELESS_CHAR(json, position);
         // 解析key
-        if (json[position] != '"') {
-            throw JsonParseException("the key of obejct must be a string", position);
+        if (position < json.size() && json[position] != '"') {
+            throw JsonParseException("the key of object must be a string", position);
         }
         JsonValue key = parseString(json, position, option);
         SKIP_USELESS_CHAR(json, position);
         // 是否超范围,或者是否没有:
         if (position >= json.size() || json[position] != ':') {
-            throw JsonParseException("Unexpected end of Object", position);
+            break;
         }
         position++;
         // 准备解析值
         JsonValue value = parseValue(json, position, option);
         if (position >= json.size()) {
-            throw JsonParseException("Unexpected end of Array", position);
+            break;
         }
-        object.emplace(key.get<std::string>(), value);
+        object.emplace(key.asString(), value);
         SKIP_USELESS_CHAR(json, position);
         // 如果遇到了}
         if (json[position] == '}') {
@@ -634,6 +688,7 @@ JsonValue parseObject(const std::string_view& json, size_t& position, uint8_t op
         }
         position++;
     }
+    throw JsonParseException("Unexpected end of Object", position);
 }
 
 namespace parser {
@@ -662,55 +717,32 @@ static void stringifyValue(const JsonValue& value, std::ostringstream& oss, int 
 
 /**
  * @brief 序列化空值到输出流。
- * @param value JSON 值（空值）
  * @param oss 输出字符串流。
- * @param indent 缩进空格数。
- * @param level 当前缩进层级。
  */
-inline static void
-stringifyNull(const JsonValue& value, std::ostringstream& oss, int indent, int level);
+inline static void stringifyNull(std::ostringstream& oss);
 
 /**
  * @brief 序列化布尔值到输出流。
  * @param value JSON 值（布尔值）
  * @param oss 输出字符串流。
- * @param indent 缩进空格数。
- * @param level 当前缩进层级。
  */
-inline static void
-stringifyBoolean(const JsonValue& value, std::ostringstream& oss, int indent, int level);
+inline static void stringifyBoolean(const JsonValue& value, std::ostringstream& oss);
 
 /**
  * @brief 序列化整数值到输出流。
  * @param value JSON 值（整数）
  * @param oss 输出字符串流。
- * @param indent 缩进空格数。
- * @param level 当前缩进层级。
  * @exception JsonException 如果数值无效（如无穷大或 NaN），抛出异常。
  */
-inline static void
-stringifyInteger(const JsonValue& value, std::ostringstream& oss, int indent, int level);
+inline static void stringifyInteger(const JsonValue& value, std::ostringstream& oss);
 
 /**
  * @brief 序列化浮点数值到输出流。
  * @param value JSON 值（浮点数）
  * @param oss 输出字符串流。
- * @param indent 缩进空格数。
- * @param level 当前缩进层级。
  * @exception JsonException 如果数值无效（如无穷大或 NaN），抛出异常。
  */
-inline static void
-stringifyDouble(const JsonValue& value, std::ostringstream& oss, int indent, int level);
-
-/**
- * @brief 序列化字符串值到输出流。
- * @param value JSON 值（字符串）
- * @param oss 输出字符串流。
- * @param indent 缩进空格数。
- * @param level 当前缩进层级。
- */
-inline static void
-stringifyString(const JsonValue& value, std::ostringstream& oss, int indent, int level);
+inline static void stringifyDouble(const JsonValue& value, std::ostringstream& oss);
 
 /**
  * @brief 序列化字符串到输出流（处理转义字符）
@@ -739,51 +771,88 @@ static void stringifyObject(const JsonValue& value, std::ostringstream& oss, int
 
 void stringifyValue(const JsonValue& value, std::ostringstream& oss, int indent, int level) {
     // 根据类型调用不同的stringify
-#define STRINGIFY(type)                                                                            \
-    case JsonType::type: return stringify##type(value, oss, indent, level)
     switch (value.type()) {
-        STRINGIFY(Null);
-        STRINGIFY(Boolean);
-        STRINGIFY(Integer);
-        STRINGIFY(Double);
-        STRINGIFY(String);
-        STRINGIFY(Array);
-        STRINGIFY(Object);
+        case JsonType::Null: return stringifyNull(oss);
+        case JsonType::Boolean: return stringifyBoolean(value, oss);
+        case JsonType::Integer: return stringifyInteger(value, oss);
+        case JsonType::Double: return stringifyDouble(value, oss);
+        case JsonType::String: return stringifyString(value.asString(), oss);
+        case JsonType::Array: return stringifyArray(value, oss, indent, level);
+        case JsonType::Object: return stringifyObject(value, oss, indent, level);
     }
-#undef STRINGIFY
 }
 
-void stringifyNull(const ccjson::JsonValue& value, std::ostringstream& oss, int, int) {
+void stringifyNull(std::ostringstream& oss) {
     oss << "null";
 }
 
-void stringifyBoolean(const ccjson::JsonValue& value, std::ostringstream& oss, int, int) {
+void stringifyBoolean(const JsonValue& value, std::ostringstream& oss) {
     oss << (value.get<bool>() ? "true" : "false");
 }
 
-void stringifyInteger(const ccjson::JsonValue& value, std::ostringstream& oss, int, int) {
-    auto num = value.get<int64_t>();
-    if (std::isfinite(num)) {
-        oss << num;
-    } else {
-        throw JsonException("Cannot stringify infinite or NaN number");
-    }
+void stringifyInteger(const JsonValue& value, std::ostringstream& oss) {
+    oss << value.get<int64_t>();
 }
 
-void stringifyDouble(const ccjson::JsonValue& value, std::ostringstream& oss, int, int) {
+void stringifyDouble(const JsonValue& value, std::ostringstream& oss) {
     auto num = value.get<double>();
     if (std::isfinite(num)) {
-        oss << std::to_string(num);
+        std::ostringstream vss;
+        // 确保使用点号作为小数点
+        vss.imbue(std::locale::classic());
+        // 检查是否为整数值但需要表示为浮点数
+        bool isIntegerValue =
+            (num == std::floor(num)) && (std::abs(num) < 1e14);  // 避免大整数精度问题
+        const double absValue = std::abs(num);
+        // 决定使用常规表示法还是科学计数法
+        bool useScientific = (absValue >= 1e6) || (absValue > 0 && absValue < 1e-4);
+        if (useScientific) {
+            // 科学计数法表示 - 先获取原始科学计数法字符串
+            vss << std::scientific << std::setprecision(15) << num;
+            std::string str = vss.str();
+            // 解析科学计数法的各个部分
+            size_t ePos = str.find_first_of("eE");
+            if (ePos == std::string::npos) {
+                // 不是科学计数法格式，直接返回
+                oss << str;
+                return;
+            }
+            // 分解为尾数和指数部分
+            std::string mantissa = str.substr(0, ePos);
+            std::string exponent = str.substr(ePos + 1);
+            // 处理尾数部分
+
+            // 移除尾数部分无意义的零
+            size_t lastNonZero = mantissa.find_last_not_of('0');
+            if (lastNonZero != std::string::npos) {
+                if (mantissa[lastNonZero] == '.') {
+                    mantissa.erase(lastNonZero);
+                }
+            }
+            // 处理指数部分
+            int expValue = std::stoi(exponent);
+
+            // 重新构建科学计数法字符串
+            std::ostringstream result;
+            // 直接输出指数，不带+号和前导零
+            result << mantissa << 'e' << expValue;
+
+            oss << result.str();
+            return;
+        } else if (isIntegerValue) {
+            // 对于整数值的浮点数，强制添加 .0
+            vss << std::fixed << std::setprecision(1) << num;
+            oss << vss.str();
+            return;
+        } else {
+            // 常规表示法
+            vss << std::setprecision(std::numeric_limits<double>::max_digits10) << num;
+            oss << vss.str();
+            return;
+        }
     } else {
         throw JsonException("Cannot stringify infinite or NaN number");
     }
-}
-
-void stringifyString(const ccjson::JsonValue& value,
-                     std::ostringstream&      oss,
-                     int                      indent,
-                     int                      level) {
-    stringifyString(value.get<std::string>(), oss);
 }
 
 void stringifyString(const std::string& value, std::ostringstream& oss) {
@@ -803,58 +872,52 @@ void stringifyString(const std::string& value, std::ostringstream& oss) {
     oss << '"';
 }
 
-void stringifyArray(const ccjson::JsonValue& value,
-                    std::ostringstream&      oss,
-                    int                      indent,
-                    int                      level) {
-    const auto& array = value.get<JsonArray>();
+void stringifyArray(const JsonValue& value, std::ostringstream& oss, int indent, int level) {
+    const auto& array = value.asArray();
     if (array.empty()) {
         oss << "[]";
         return;
     }
-    oss << "[";
+    oss << '[';
     for (size_t i = 0; i < array.size(); i++) {
         if (i > 0) {
-            oss << ",";
+            oss << ',';
         }
         if (indent != 0) {
-            oss << "\n";
+            oss << '\n';
         }
         oss << std::string((level + 1) * indent, ' ');
         stringifyValue(array[i], oss, indent, level + 1);
     }
     if (indent != 0) {
-        oss << "\n" << std::string(level * indent, ' ');
+        oss << '\n' << std::string(level * indent, ' ');
     }
-    oss << "]";
+    oss << ']';
 }
 
-void stringifyObject(const ccjson::JsonValue& value,
-                     std::ostringstream&      oss,
-                     int                      indent,
-                     int                      level) {
-    const auto& object = value.get<JsonObject>();
+void stringifyObject(const JsonValue& value, std::ostringstream& oss, int indent, int level) {
+    const auto& object = value.asObject();
     if (object.empty()) {
         oss << "{}";
         return;
     }
-    oss << "{";
+    oss << '{';
     bool first = true;
-    for (const auto& [key, val] : object) {
+    for (const auto& [k, v] : object) {
         if (!first) {
             oss << ',';
         }
         if (indent != 0) {
-            oss << "\n";
+            oss << '\n';
         }
         oss << std::string((level + 1) * indent, ' ');
         first = false;
-        stringifyString(key, oss);
+        stringifyString(k, oss);
         oss << ':';
-        stringifyValue(val, oss, indent, level + 1);
+        stringifyValue(v, oss, indent, level + 1);
     }
     if (indent != 0) {
-        oss << "\n" << std::string(level * indent, ' ');
+        oss << '\n' << std::string(level * indent, ' ');
     }
     oss << '}';
 }
