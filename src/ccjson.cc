@@ -692,7 +692,7 @@ JsonValue parseObject(const std::string_view& json, size_t& position, uint8_t op
 }
 
 namespace parser {
-    JsonValue parse(std::string_view json, uint8_t option) {
+    JsonValue parse(std::string_view json, ParserOption option) {
         size_t    position = 0;
         JsonValue result   = parseValue(json, position, option);
         SKIP_USELESS_CHAR(json, position);
@@ -929,33 +929,6 @@ namespace parser {
         return oss.str();
     }
 }  // namespace parser
-
-JsonValue::ConstIterator::value_type& JsonValue::ConstIterator::operator*() const {
-    return std::visit(
-        [this](const auto& it) -> reference {
-            using T = std::decay_t<decltype(it)>;
-            if constexpr (std::is_same_v<T, JsonObject::const_iterator>) {
-                return it->second;  // For objects, return the value part of the pair
-            } else if constexpr (std::is_same_v<T, JsonArray::const_iterator>) {
-                return *it;  // For arrays, return the element
-            } else {
-                return *m_host;  // For simple types, return the value itself
-            }
-        },
-        m_iterator);
-}
-
-std::string JsonValue::ConstIterator::key() const {
-    return std::visit(
-        [](const auto& it) -> std::string {
-            using T = std::decay_t<decltype(it)>;
-            if constexpr (std::is_same_v<T, JsonObject::const_iterator>) {
-                return it->first;
-            }
-            throw JsonException("cannot use key() for non-Object iterators");
-        },
-        m_iterator);
-}
 
 }  // namespace ccjson
 #pragma clang diagnostic pop

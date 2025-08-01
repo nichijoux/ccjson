@@ -23,57 +23,6 @@ namespace ccjson {
 // 前向声明
 class JsonValue;
 
-// 辅助模板
-/**
- * @struct is_vector
- * @brief 模板元编程工具，用于检查类型是否为 std::vector。
- *
- * 默认情况下，is_vector 继承自 std::false_type，表示类型 T 不是 std::vector。
- * @tparam T 要检查的类型。
- */
-template <typename T>
-struct is_vector : std::false_type {};
-
-/**
- * @struct is_vector&lt;std::vector&lt;T&gt;&gt;
- * @brief is_vector 的特化版本，用于确认类型为 std::vector。
- *
- * 当类型 T 为 std::vector 时，继承自 std::true_type。
- * @tparam T 向量元素的类型。
- */
-template <typename T>
-struct is_vector<std::vector<T>> : std::true_type {};
-
-/**
- * @struct is_string_map
- * @brief 模板元编程工具，用于检查类型是否为键为字符串的 std::map 或 std::unordered_map。
- *
- * 默认情况下，is_string_map 继承自 std::false_type，表示类型 T 不是键为字符串的映射。
- * @tparam T 要检查的类型。
- */
-template <typename T>
-struct is_string_map : std::false_type {};
-
-/**
- * @struct is_string_map&lt;std::map&lt;std::string, T&gt;&gt;
- * @brief is_string_map 的特化版本，用于确认类型为 std::map&lt;std::string, T&gt;
- *
- * 当类型 T 为键为字符串的 std::map 时，继承自 std::true_type
- * @tparam T 映射值的类型。
- */
-template <typename T>
-struct is_string_map<std::map<std::string, T>> : std::true_type {};
-
-/**
- * @struct is_string_map&lt;std::unordered_map&lt;std::string, T&gt;&gt;
- * @brief is_string_map 的特化版本，用于确认类型为 std::unordered_map&lt;std::string, T&gt;。
- *
- * 当类型 T 为键为字符串的 std::unordered_map 时，继承自 std::true_type。
- * @tparam T 映射值的类型。
- */
-template <typename T>
-struct is_string_map<std::unordered_map<std::string, T>> : std::true_type {};
-
 /**
  * @enum JsonType
  * @brief 定义 JSON 数据支持的类型。
@@ -921,136 +870,366 @@ class JsonValue {
 
   private:
     /**
-     * @class ConstIterator
-     * @brief JsonValue 的常量迭代器，用于遍历数组或对象元素。
-     *
-     * 支持前向迭代，提供对 JSON 数组或对象的只读访问。
-     * @note 使用 std::variant 存储不同类型的迭代器（数组、对象或简单类型）。
+     * @brief 通用迭代器模板类，用于遍历 JSON 数据结构（对象或数组）。
+     * @tparam T 迭代器操作的值类型（通常为 JsonValue）。
+     * @tparam IsConst 是否为常量迭代器（true 表示 const，false 表示非 const）。
      */
-    class ConstIterator {
+    template <typename T, bool IsConst>
+    class BaseIterator {
       public:
-        using iterator_category = std::forward_iterator_tag;  ///< 迭代器类别
-        using value_type        = const JsonValue;            ///< 迭代器值类型
-        using difference_type   = std::ptrdiff_t;             ///< 差值类型
-        using reference         = value_type&;                ///< 引用类型
-        using pointer           = value_type*;                ///< 指针类型
+        using value_type = std::conditional_t<IsConst, const T, T>;  ///< 迭代器指向的值类型。
+        using pointer         = value_type*;                        ///< 指向值的指针类型。
+        using reference       = value_type&;                        ///< 值的引用类型。
+        using difference_type = std::ptrdiff_t;                     ///< 迭代器差值类型。
+        using iterator_category = std::bidirectional_iterator_tag;  ///< 迭代器类别（双向迭代器）。
+
+        using ObjectIterator = std::conditional_t<IsConst,
+                                                  JsonObject::const_iterator,
+                                                  JsonObject::iterator>;  ///< 对象迭代器类型。
+        using ArrayIterator  = std::conditional_t<IsConst,
+                                                  JsonArray::const_iterator,
+                                                  JsonArray::iterator>;  ///< 数组迭代器类型。
 
         /**
-         * @brief 前置递增运算符
-         * @return 自身引用
-         * @note 递增内部迭代器（数组、对象或简单类型的计数）
+         * @brief 构造函数，初始化迭代器。
+         * @param value 指向的 JSON 值（对象、数组或基本类型）。
+         * @param end 是否为结束迭代器（true 表示结束位置，false 表示起始位置）。
          */
-        inline ConstIterator& operator++() {
-            std::visit([](auto& it) { ++it; }, m_iterator);
-            return *this;
+        BaseIterator(std::conditional_t<IsConst, const T*, T*> value, bool end = false)
+            : m_value(value) {
+            if (value->isObject()) {
+                m_it = end ? value->m_value.object->end() : value->m_value.object->begin();
+            } else if (value->isArray()) {
+                m_it = end ? value->m_value.array->end() : value->m_value.array->begin();
+            } else {
+                m_it = end ? static_cast<size_t>(1) : 0;
+            }
         }
 
         /**
-         * @brief 后置递增运算符
-         * @return 递增前的迭代器副本
+         * @brief 解引用操作符，返回当前迭代器指向的值。
+         * @return 当前值的引用。
          */
-        inline ConstIterator operator++(int) {
-            auto temp = *this;
-            ++(*this);
-            return temp;
+        reference operator*() const {
+            if (m_value->isObject()) {
+                return std::get<ObjectIterator>(m_it)->second;
+            } else if (m_value->isArray()) {
+                return *std::get<ArrayIterator>(m_it);
+            } else {
+                return *m_value;
+            }
         }
 
         /**
-         * @brief 相等比较运算符
-         * @param other 另一个迭代器
-         * @return 如果迭代器相等，返回 true；否则返回 false
+         * @brief 箭头操作符，返回当前迭代器指向值的指针。
+         * @return 指向当前值的指针。
          */
-        inline bool operator==(const ConstIterator& other) const {
-            return m_host == other.m_host && m_iterator == other.m_iterator;
-        }
-
-        /**
-         * @brief 不等比较运算符
-         * @param other 另一个迭代器
-         * @return 如果迭代器不相等，返回 true；否则返回 false
-         */
-        inline bool operator!=(const ConstIterator& other) const {
-            return !(*this == other);
-        }
-
-        /**
-         * @brief 解引用运算符
-         * @return 当前迭代器指向的 JsonValue 引用
-         */
-        reference operator*() const;
-
-        /**
-         * @brief 指针访问运算符
-         * @return 当前迭代器指向的 JsonValue 指针
-         */
-        inline pointer operator->() const {
+        pointer operator->() const {
             return &this->operator*();
         }
 
         /**
-         * @brief 获取当前对象的键（仅对对象类型有效）
-         * @return 当前对象的键（字符串）
-         * @exception JsonException 如果当前类型不是对象，抛出异常
+         * @brief 前置递增操作符，移动到下一个元素。
+         * @return 当前迭代器的引用。
          */
-        std::string key() const;
+        BaseIterator& operator++() {
+            if (m_value->isObject()) {
+                ++std::get<ObjectIterator>(m_it);
+            } else if (m_value->isArray()) {
+                ++std::get<ArrayIterator>(m_it);
+            } else {
+                ++std::get<size_t>(m_it);
+            }
+            return *this;
+        }
 
         /**
-         * @brief 获取当前迭代器指向的值
-         * @return 当前迭代器指向的 JsonValue 引用
+         * @brief 后置递增操作符，移动到下一个元素并返回原迭代器副本。
+         * @return 原迭代器的副本。
          */
-        inline reference value() const {
+        BaseIterator operator++(int) {
+            BaseIterator tmp = *this;
+            ++(*this);
+            return tmp;
+        }
+
+        /**
+         * @brief 前置递减操作符，移动到上一个元素。
+         * @return 当前迭代器的引用。
+         */
+        BaseIterator& operator--() {
+            if (m_value->isObject()) {
+                --std::get<ObjectIterator>(m_it);
+            } else if (m_value->isArray()) {
+                --std::get<ArrayIterator>(m_it);
+            } else {
+                --std::get<size_t>(m_it);
+            }
+            return *this;
+        }
+
+        /**
+         * @brief 后置递减操作符，移动到上一个元素并返回原迭代器副本。
+         * @return 原迭代器的副本。
+         */
+        BaseIterator operator--(int) {
+            BaseIterator tmp = *this;
+            --(*this);
+            return tmp;
+        }
+
+        /**
+         * @brief 比较两个迭代器是否相等。
+         * @param other 另一个迭代器。
+         * @return 如果两个迭代器指向相同位置，返回 true，否则返回 false。
+         */
+        bool operator==(const BaseIterator& other) const {
+            if (m_value != other.m_value) {
+                return false;
+            }
+            if (m_value->isObject()) {
+                return std::get<ObjectIterator>(m_it) == std::get<ObjectIterator>(other.m_it);
+            } else if (m_value->isArray()) {
+                return std::get<ArrayIterator>(m_it) == std::get<ArrayIterator>(other.m_it);
+            } else {
+                return std::get<size_t>(m_it) == std::get<size_t>(other.m_it);
+            }
+        }
+
+        /**
+         * @brief 比较两个迭代器是否不相等。
+         * @param other 另一个迭代器。
+         * @return 如果两个迭代器指向不同位置，返回 true，否则返回 false。
+         */
+        bool operator!=(const BaseIterator& other) const {
+            return !(this->operator==(other));
+        }
+
+        /**
+         * @brief 获取当前对象迭代器的键（仅适用于对象类型）。
+         * @return 当前键的字符串。
+         * @throws JsonException 如果迭代器不指向对象类型。
+         */
+        std::string key() const {
+            if (!m_value->isObject()) {
+                throw JsonException("Not an object iterator");
+            }
+            return std::get<ObjectIterator>(m_it)->first;
+        }
+
+        /**
+         * @brief 获取当前迭代器的值。
+         * @return 当前值的引用。
+         */
+        reference value() const {
             return operator*();
         }
 
       private:
-        using IteratorType = std::variant<JsonArray::const_iterator,
-                                          JsonObject::const_iterator,
-                                          size_t>;  ///< 迭代器类型
+        std::conditional_t<IsConst, const T*, T*> m_value = nullptr;  ///< 指向的 JSON 值。
+        std::variant<ObjectIterator, ArrayIterator, size_t>
+            m_it;  ///< 内部迭代器（对象、数组或基本类型的索引）。
+    };
+
+    /**
+     * @brief 非 const 迭代器类型，用于遍历可修改的 JsonValue。
+     */
+    using Iterator = BaseIterator<JsonValue, false>;
+
+    /**
+     * @brief const 迭代器类型，用于遍历不可修改的 JsonValue。
+     */
+    using ConstIterator = BaseIterator<JsonValue, true>;
+
+    /**
+     * @brief 反向迭代器模板类，用于反向遍历 JSON 数据结构。
+     * @tparam ForwardIt 正向迭代器类型。
+     */
+    template <typename ForwardIt>
+    class BaseReverseIterator {
+      public:
+        using value_type = typename ForwardIt::value_type;  ///< 反向迭代器指向的值类型。
+        using reference       = typename ForwardIt::reference;  ///< 值的引用类型。
+        using pointer         = typename ForwardIt::pointer;    ///< 指向值的指针类型。
+        using difference_type = typename ForwardIt::difference_type;  ///< 迭代器差值类型。
+        using iterator_category = std::bidirectional_iterator_tag;  ///< 迭代器类别（双向迭代器）。
 
         /**
-         * @brief 构造函数，初始化迭代器
-         * @param host 所属的 JsonValue 对象
-         * @param iterator 内部迭代器（数组、对象或简单类型计数）
+         * @brief 构造函数，初始化反向迭代器。
+         * @param it 正向迭代器，用于初始化反向迭代器。
          */
-        ConstIterator(const JsonValue* host, IteratorType iterator)
-            : m_host(host), m_iterator(iterator) {}
+        explicit BaseReverseIterator(ForwardIt it) : m_it(std::move(it)) {}
+
+        /**
+         * @brief 解引用操作符，返回当前反向迭代器指向的值。
+         * @return 当前值的引用。
+         */
+        reference operator*() const {
+            auto tmp = m_it;
+            return *--tmp;
+        }
+
+        /**
+         * @brief 箭头操作符，返回当前反向迭代器指向值的指针。
+         * @return 指向当前值的指针。
+         */
+        pointer operator->() const {
+            auto tmp = m_it;
+            return &*--tmp;
+        }
+
+        /**
+         * @brief 前置递增操作符，移动到上一个元素（反向遍历）。
+         * @return 当前反向迭代器的引用。
+         */
+        BaseReverseIterator& operator++() {
+            --m_it;
+            return *this;
+        }
+
+        /**
+         * @brief 后置递增操作符，移动到上一个元素并返回原迭代器副本。
+         * @return 原反向迭代器的副本。
+         */
+        BaseReverseIterator operator++(int) {
+            BaseReverseIterator tmp = *this;
+            --m_it;
+            return tmp;
+        }
+
+        /**
+         * @brief 前置递减操作符，移动到下一个元素（反向遍历）。
+         * @return 当前反向迭代器的引用。
+         */
+        BaseReverseIterator& operator--() {
+            ++m_it;
+            return *this;
+        }
+
+        /**
+         * @brief 后置递减操作符，移动到下一个元素并返回原迭代器副本。
+         * @return 原反向迭代器的副本。
+         */
+        BaseReverseIterator operator--(int) {
+            BaseReverseIterator tmp = *this;
+            ++m_it;
+            return tmp;
+        }
+
+        /**
+         * @brief 比较两个反向迭代器是否相等。
+         * @param other 另一个反向迭代器。
+         * @return 如果两个反向迭代器指向相同位置，返回 true，否则返回 false。
+         */
+        bool operator==(const BaseReverseIterator& other) const {
+            return m_it == other.m_it;
+        }
+
+        /**
+         * @brief 比较两个反向迭代器是否不相等。
+         * @param other 另一个反向迭代器。
+         * @return 如果两个反向迭代器指向不同位置，返回 true，否则返回 false。
+         */
+        bool operator!=(const BaseReverseIterator& other) const {
+            return m_it != other.m_it;
+        }
+
+        /**
+         * @brief 获取当前对象反向迭代器的键（仅适用于对象类型）。
+         * @return 当前键的字符串。
+         * @throws JsonException 如果迭代器不指向对象类型。
+         */
+        std::string key() const {
+            auto tmp = m_it;
+            return (--tmp).key();
+        }
+
+        /**
+         * @brief 获取当前反向迭代器的值。
+         * @return 当前值的引用。
+         */
+        reference value() const {
+            auto tmp = m_it;
+            return (--tmp).value();
+        }
 
       private:
-        const JsonValue* m_host;      ///< 所属 JsonValue 对象
-        IteratorType     m_iterator;  ///< 内部迭代器
-
-        friend class JsonValue;
+        ForwardIt m_it;  ///< 内部正向迭代器。
     };
+
+    /**
+     * @brief 非 const 反向迭代器类型，用于反向遍历可修改的 JsonValue。
+     */
+    using ReverseIterator = BaseReverseIterator<Iterator>;
+
+    /**
+     * @brief const 反向迭代器类型，用于反向遍历不可修改的 JsonValue。
+     */
+    using ConstReverseIterator = BaseReverseIterator<ConstIterator>;
 
   public:
     /**
-     * @brief 获取迭代器起始位置
-     * @return 指向数组、对象或简单类型起始位置的常量迭代器
-     * @note 对于简单类型，begin 返回计数 0
+     * @brief 获取 JSON 数据结构的正向迭代器（非 const），指向起始位置。
+     * @return Iterator 类型的迭代器，指向 JSON 数据的开头。
      */
-    ConstIterator begin() const noexcept {
-        switch (m_type) {
-            case JsonType::Object: return {this, m_value.object->begin()};
-            case JsonType::Array: return {this, m_value.array->begin()};
-            default:
-                // 对于简单类型，begin即为0
-                return ConstIterator(this, size_t{0});
-        }
+    Iterator begin() {
+        return {this};
     }
 
     /**
-     * @brief 获取迭代器结束位置
-     * @return 指向数组、对象或简单类型结束位置的常量迭代器
-     * @note 对于简单类型，end 返回计数 1
+     * @brief 获取 JSON 数据结构的正向迭代器（非 const），指向结束位置。
+     * @return Iterator 类型的迭代器，指向 JSON 数据的末尾。
      */
-    ConstIterator end() const noexcept {
-        switch (m_type) {
-            case JsonType::Object: return {this, m_value.object->end()};
-            case JsonType::Array: return {this, m_value.array->end()};
-            default:
-                // 对于简单类型，end即为1
-                return ConstIterator(this, size_t{1});
-        }
+    Iterator end() {
+        return {this, true};
+    }
+
+    /**
+     * @brief 获取 JSON 数据结构的反向迭代器（非 const），指向反向遍历的起始位置（即正向的末尾）。
+     * @return ReverseIterator 类型的反向迭代器，指向 JSON 数据的末尾。
+     */
+    ReverseIterator rbegin() {
+        return ReverseIterator(end());
+    }
+
+    /**
+     * @brief 获取 JSON 数据结构的反向迭代器（非 const），指向反向遍历的结束位置（即正向的开头）。
+     * @return ReverseIterator 类型的反向迭代器，指向 JSON 数据的开头。
+     */
+    ReverseIterator rend() {
+        return ReverseIterator(begin());
+    }
+
+    /**
+     * @brief 获取 JSON 数据结构的正向迭代器（const），指向起始位置。
+     * @return ConstIterator 类型的迭代器，指向 JSON 数据的开头。
+     */
+    ConstIterator begin() const {
+        return {this};
+    }
+
+    /**
+     * @brief 获取 JSON 数据结构的正向迭代器（const），指向结束位置。
+     * @return ConstIterator 类型的迭代器，指向 JSON 数据的末尾。
+     */
+    ConstIterator end() const {
+        return {this, true};
+    }
+
+    /**
+     * @brief 获取 JSON 数据结构的反向迭代器（const），指向反向遍历的起始位置（即正向的末尾）。
+     * @return ConstReverseIterator 类型的反向迭代器，指向 JSON 数据的末尾。
+     */
+    ConstReverseIterator rbegin() const {
+        return ConstReverseIterator(end());
+    }
+
+    /**
+     * @brief 获取 JSON 数据结构的反向迭代器（const），指向反向遍历的结束位置（即正向的开头）。
+     * @return ConstReverseIterator 类型的反向迭代器，指向 JSON 数据的开头。
+     */
+    ConstReverseIterator rend() const {
+        return ConstReverseIterator(begin());
     }
 
   private:
@@ -1098,7 +1277,7 @@ namespace parser {
      * @return 解析结果的 JsonValue 对象。
      * @exception JsonParseException 如果解析失败，抛出异常，包含错误信息和位置。
      */
-    JsonValue parse(std::string_view json, uint8_t option = DISABLE_EXTENSION);
+    JsonValue parse(std::string_view json, ParserOption option = DISABLE_EXTENSION);
 
     /**
      * @brief 将 JsonValue 序列化为 JSON 字符串。

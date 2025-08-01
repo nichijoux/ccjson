@@ -23,22 +23,20 @@ int main() {
         JsonValue json;
         try {
             json = parser::parse(json_str);
-            std::cout << "Successfully parsed twitter.json" << std::endl;
+            std::cout << "Successfully parsed twitter.json" << '\n';
 
             // 打印JSON内容
-            std::cout << "\nJSON Content:" << std::endl;
-            std::cout << "----------------------------------------" << std::endl;
-            std::cout << json << std::endl;
-            std::cout << "----------------------------------------" << std::endl;
+            std::cout << "\nJSON Content:" << '\n';
+            std::cout << "----------------------------------------" << '\n';
+            std::cout << json << '\n';
+            std::cout << "----------------------------------------" << '\n';
 
         } catch (const JsonException& e) {
-            std::cerr << "Parse error: " << e.what() << std::endl;
+            std::cerr << "Parse error: " << e.what() << '\n';
             return 1;
         }
 
-        std::cout << "Successfully wrote to output.json" << std::endl;
         return 0;
-
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << std::endl;
         return 1;
