@@ -19,7 +19,6 @@
 #    include <vector>
 
 namespace ccjson {
-
 // 前向声明
 class JsonValue;
 
@@ -30,13 +29,13 @@ class JsonValue;
  * 枚举了 JSON 值的所有可能类型，包括空值、布尔值、整数、浮点数、字符串、数组和对象。
  */
 enum class JsonType {
-    Null,     ///< 空值
-    Boolean,  ///< 布尔值
-    Integer,  ///< 整数
-    Double,   ///< 浮点数
-    String,   ///< 字符串
-    Array,    ///< 数组
-    Object    ///< 对象
+    Null,    ///< 空值
+    Boolean, ///< 布尔值
+    Integer, ///< 整数
+    Double,  ///< 浮点数
+    String,  ///< 字符串
+    Array,   ///< 数组
+    Object   ///< 对象
 };
 
 /**
@@ -46,7 +45,7 @@ enum class JsonType {
  * 用于表示 JSON 处理过程中发生的错误，例如类型转换失败或无效值
  */
 class JsonException : public std::runtime_error {
-  public:
+public:
     using std::runtime_error::runtime_error;
 };
 
@@ -56,15 +55,15 @@ class JsonException : public std::runtime_error {
  *
  * 用于表示 JSON 字符串解析失败的情况，包含错误信息和发生错误的字符位置。
  */
-class JsonParseException : public std::runtime_error {
-  public:
+class JsonParseException final : public JsonException {
+public:
     /**
      * @brief 构造函数，创建带有错误消息和位置的异常。
      * @param message 错误描述信息。
      * @param position 解析失败的字符位置。
      */
     JsonParseException(const std::string& message, size_t position)
-        : std::runtime_error(message + ", position: " + std::to_string(position)) {}
+        : JsonException(message + ", position: " + std::to_string(position)) {}
 };
 
 /**
@@ -110,8 +109,8 @@ struct HasFromJson : std::false_type {};
  */
 template <typename T>
 struct HasFromJson<
-    T,
-    std::void_t<decltype(fromJson(std::declval<const JsonValue&>(), std::declval<T&>()))>>
+        T,
+        std::void_t<decltype(fromJson(std::declval<const JsonValue&>(), std::declval<T&>()))>>
     : std::is_same<decltype(fromJson(std::declval<const JsonValue&>(), std::declval<T&>())), void> {
 };
 
@@ -198,23 +197,26 @@ JsonValue toJson(const Map& map);
  * @note 该类使用联合体存储不同类型的值
  */
 class JsonValue {
-  public:
+public:
     /**
      * @brief 默认构造函数，初始化为空值（Null）
      */
-    JsonValue() noexcept : m_type(JsonType::Null) {}
+    JsonValue() noexcept
+        : m_type(JsonType::Null) {}
 
     /**
      * @brief 构造空值类型的 JSON 数据。
      * @param value 空值（std::nullptr_t）
      */
-    JsonValue(std::nullptr_t) noexcept : m_type(JsonType::Null) {}
+    JsonValue(std::nullptr_t) noexcept
+        : m_type(JsonType::Null) {}
 
     /**
      * @brief 构造布尔类型的 JSON 数据。
      * @param value 布尔值（true 或 false）
      */
-    JsonValue(bool value) noexcept : m_type(JsonType::Boolean) {
+    JsonValue(const bool value) noexcept
+        : m_type(JsonType::Boolean) {
         m_value.boolean = value;
     }
 
@@ -225,7 +227,8 @@ class JsonValue {
      */
     template <typename T,
               std::enable_if_t<std::is_integral_v<T> && !std::is_same_v<T, bool>, int> = 0>
-    JsonValue(T value) noexcept : m_type(JsonType::Integer) {
+    JsonValue(T value) noexcept
+        : m_type(JsonType::Integer) {
         m_value.iNumber = static_cast<int64_t>(value);
     }
 
@@ -235,7 +238,8 @@ class JsonValue {
      * @param value 浮点数值。
      */
     template <typename T, std::enable_if_t<std::is_floating_point_v<T>, int> = 0>
-    JsonValue(T value) noexcept : m_type(JsonType::Double) {
+    JsonValue(T value) noexcept
+        : m_type(JsonType::Double) {
         m_value.dNumber = static_cast<double>(value);
     }
 
@@ -250,11 +254,17 @@ class JsonValue {
                   std::is_convertible_v<const std::decay_t<T>&, std::string_view> &&
                   // 2. 并且，类型 T 不是 JsonValue
                   !std::is_same_v<std::decay_t<T>, JsonValue>>>
-    JsonValue(T&& value) noexcept : m_type(JsonType::String) {
+    JsonValue(T&& value) noexcept
+        : m_type(JsonType::String) {
         m_value.string = new JsonString(value);
     }
 
-    JsonValue(JsonString&& value) noexcept : m_type(JsonType::String) {
+    /**
+     * @brief 构造字符串类型的 JsonValue（移动构造）
+     * @param value 字符串值（右值）。
+     */
+    JsonValue(JsonString&& value) noexcept
+        : m_type(JsonType::String) {
         m_value.string = new JsonString(std::move(value));
     }
 
@@ -262,7 +272,8 @@ class JsonValue {
      * @brief 构造数组类型的 JSON 数据。
      * @param value JSON 数组对象。
      */
-    JsonValue(const JsonArray& value) noexcept : m_type(JsonType::Array) {
+    JsonValue(const JsonArray& value) noexcept
+        : m_type(JsonType::Array) {
         m_value.array = new JsonArray(value);
     }
 
@@ -270,7 +281,8 @@ class JsonValue {
      * @brief 构造对象类型的 JSON 数据。
      * @param value JSON 对象（键值对映射）
      */
-    JsonValue(const JsonObject& value) noexcept : m_type(JsonType::Object) {
+    JsonValue(const JsonObject& value) noexcept
+        : m_type(JsonType::Object) {
         m_value.object = new JsonObject(value);
     }
 
@@ -280,7 +292,8 @@ class JsonValue {
      * @param vec 向量对象。
      */
     template <typename T>
-    JsonValue(const std::vector<T>& vec) : m_type(JsonType::Array) {
+    JsonValue(const std::vector<T>& vec)
+        : m_type(JsonType::Array) {
         *this = toJson(vec);
     }
 
@@ -290,7 +303,8 @@ class JsonValue {
      * @param map 映射对象。
      */
     template <typename T>
-    JsonValue(const std::map<std::string, T>& map) : m_type(JsonType::Object) {
+    JsonValue(const std::map<std::string, T>& map)
+        : m_type(JsonType::Object) {
         *this = toJson(map);
     }
 
@@ -300,7 +314,8 @@ class JsonValue {
      * @param map 无序映射对象。
      */
     template <typename T>
-    JsonValue(const std::unordered_map<std::string, T>& map) : m_type(JsonType::Object) {
+    JsonValue(const std::unordered_map<std::string, T>& map)
+        : m_type(JsonType::Object) {
         *this = toJson(map);
     }
 
@@ -310,7 +325,8 @@ class JsonValue {
      * @param init 初始化列表，包含键值对（const char*, T）
      */
     template <typename T>
-    JsonValue(std::initializer_list<std::pair<const char*, T>> init) : m_type(JsonType::Object) {
+    JsonValue(std::initializer_list<std::pair<const char*, T>> init)
+        : m_type(JsonType::Object) {
         m_value.object = new JsonObject();
         for (const auto& [k, v] : init) {
             (*m_value.object)[k] = JsonValue(v);
@@ -342,8 +358,8 @@ class JsonValue {
         m_type         = JsonType::Object;
         m_value.object = new JsonObject();
         for (const auto& item : init) {
-            auto pair                     = static_cast<std::pair<const char*, JsonValue>>(item);
-            (*m_value.object)[pair.first] = pair.second;
+            auto [k, v]          = static_cast<std::pair<const char*, JsonValue>>(item);
+            (*m_value.object)[k] = v;
         }
     }
 
@@ -398,7 +414,7 @@ class JsonValue {
      * @brief 获取 JSON 数据类型。
      * @return 当前 JSON 值的类型（JsonType）
      */
-    inline JsonType type() const noexcept {
+    [[nodiscard]] JsonType type() const noexcept {
         return m_type;
     }
 
@@ -406,7 +422,7 @@ class JsonValue {
      * @brief 检查是否为空值（Null）
      * @return 如果是空值，返回 true，否则返回 false。
      */
-    inline bool isNull() const noexcept {
+    [[nodiscard]] bool isNull() const noexcept {
         return m_type == JsonType::Null;
     }
 
@@ -414,7 +430,7 @@ class JsonValue {
      * @brief 检查是否为布尔类型。
      * @return 如果是布尔值，返回 true，否则返回 false。
      */
-    inline bool isBoolean() const noexcept {
+    [[nodiscard]] bool isBoolean() const noexcept {
         return m_type == JsonType::Boolean;
     }
 
@@ -422,7 +438,7 @@ class JsonValue {
      * @brief 检查是否为数值类型（整数或浮点数）
      * @return 如果是数值类型，返回 true，否则返回 false。
      */
-    inline bool isNumber() const noexcept {
+    [[nodiscard]] bool isNumber() const noexcept {
         return m_type == JsonType::Integer || m_type == JsonType::Double;
     }
 
@@ -430,7 +446,7 @@ class JsonValue {
      * @brief 检查是否为字符串类型。
      * @return 如果是字符串，返回 true，否则返回 false。
      */
-    inline bool isString() const noexcept {
+    [[nodiscard]] bool isString() const noexcept {
         return m_type == JsonType::String;
     }
 
@@ -438,7 +454,7 @@ class JsonValue {
      * @brief 检查是否为数组类型。
      * @return 如果是数组，返回 true，否则返回 false。
      */
-    inline bool isArray() const noexcept {
+    [[nodiscard]] bool isArray() const noexcept {
         return m_type == JsonType::Array;
     }
 
@@ -446,7 +462,7 @@ class JsonValue {
      * @brief 检查是否为对象类型
      * @return 如果是对象，返回 true，否则，返回 false
      */
-    inline bool isObject() const noexcept {
+    [[nodiscard]] bool isObject() const noexcept {
         return m_type == JsonType::Object;
     }
 
@@ -455,7 +471,7 @@ class JsonValue {
      * @return 字符串值的引用
      * @exception JsonException 如果当前类型不是字符串，抛出异常
      */
-    inline JsonString& asString() {
+    JsonString& asString() {
         if (m_type != JsonType::String) {
             throw JsonException("not a string");
         }
@@ -467,7 +483,7 @@ class JsonValue {
      * @return 字符串值的常量引用
      * @exception JsonException 如果当前类型不是字符串，抛出异常
      */
-    inline const JsonString& asString() const {
+    [[nodiscard]] const JsonString& asString() const {
         if (m_type != JsonType::String) {
             throw JsonException("not a string");
         }
@@ -479,7 +495,7 @@ class JsonValue {
      * @return 数组值的引用
      * @exception JsonException 如果当前类型不是数组，抛出异常
      */
-    inline JsonArray& asArray() {
+    JsonArray& asArray() {
         if (m_type != JsonType::Array) {
             throw JsonException("not an array");
         }
@@ -491,7 +507,7 @@ class JsonValue {
      * @return 数组值的常量引用
      * @exception JsonException 如果当前类型不是数组，抛出异常
      */
-    inline const JsonArray& asArray() const {
+    [[nodiscard]] const JsonArray& asArray() const {
         if (m_type != JsonType::Array) {
             throw JsonException("not an array");
         }
@@ -503,7 +519,7 @@ class JsonValue {
      * @return 对象值的引用
      * @exception JsonException 如果当前类型不是对象，抛出异常
      */
-    inline JsonObject& asObject() {
+    JsonObject& asObject() {
         if (m_type != JsonType::Object) {
             throw JsonException("not an object");
         }
@@ -515,7 +531,7 @@ class JsonValue {
      * @return 对象值的常量引用
      * @exception JsonException 如果当前类型不是对象，抛出异常
      */
-    inline const JsonObject& asObject() const {
+    [[nodiscard]] const JsonObject& asObject() const {
         if (m_type != JsonType::Object) {
             throw JsonException("not an object");
         }
@@ -624,7 +640,8 @@ class JsonValue {
      * @note 使用 SFINAE 确保 T 支持 toJson 函数
      */
     template <typename T, typename std::enable_if<HasToJson<T>::value, int>::type = 0>
-    JsonValue(const T& value) : m_type() {
+    JsonValue(const T& value)
+        : m_type() {
         *this = toJson(value);
     }
 
@@ -740,11 +757,11 @@ class JsonValue {
             }
             if (m_type == JsonType::Integer) {
                 return static_cast<T>(m_value.iNumber);
-            } else if (m_type == JsonType::Boolean) {
-                return m_value.boolean;
-            } else {
-                return static_cast<T>(m_value.dNumber);
             }
+            if (m_type == JsonType::Boolean) {
+                return m_value.boolean;
+            }
+            return static_cast<T>(m_value.dNumber);
         } else if constexpr (std::is_same_v<T, std::string> ||
                              std::is_same_v<T, std::string_view>) {
             return operator std::string();
@@ -794,8 +811,8 @@ class JsonValue {
     template <typename T,
               std::enable_if_t<
                   !std::is_integral_v<std::remove_reference_t<T>> &&
-                      (std::is_convertible_v<T, std::string> ||
-                       std::is_same_v<std::remove_cv_t<std::remove_reference_t<T>>, const char*>),
+                  (std::is_convertible_v<T, std::string> ||
+                   std::is_same_v<std::remove_cv_t<std::remove_reference_t<T>>, const char*>),
                   int> = 0>
     JsonValue& operator[](T&& key) {
         if (!isObject()) {
@@ -836,8 +853,8 @@ class JsonValue {
     template <typename T,
               std::enable_if_t<
                   !std::is_integral_v<std::remove_reference_t<T>> &&
-                      (std::is_convertible_v<T, std::string> ||
-                       std::is_same_v<std::remove_cv_t<std::remove_reference_t<T>>, const char*>),
+                  (std::is_convertible_v<T, std::string> ||
+                   std::is_same_v<std::remove_cv_t<std::remove_reference_t<T>>, const char*>),
                   int> = 0>
     const JsonValue& operator[](T&& key) const {
         if (!isObject()) {
@@ -855,7 +872,7 @@ class JsonValue {
      * @param indent 缩进空格数（默认 0，表示无缩进）
      * @return JSON 值的字符串表示。
      */
-    std::string toString(int indent = 0) const;
+    [[nodiscard]] std::string toString(int indent = 0) const;
 
     /**
      * @brief 输出 JSON 值到流。
@@ -868,7 +885,7 @@ class JsonValue {
         return os;
     }
 
-  private:
+private:
     /**
      * @brief 通用迭代器模板类，用于遍历 JSON 数据结构（对象或数组）。
      * @tparam T 迭代器操作的值类型（通常为 JsonValue）。
@@ -876,19 +893,19 @@ class JsonValue {
      */
     template <typename T, bool IsConst>
     class BaseIterator {
-      public:
-        using value_type = std::conditional_t<IsConst, const T, T>;  ///< 迭代器指向的值类型。
-        using pointer         = value_type*;                        ///< 指向值的指针类型。
-        using reference       = value_type&;                        ///< 值的引用类型。
-        using difference_type = std::ptrdiff_t;                     ///< 迭代器差值类型。
-        using iterator_category = std::bidirectional_iterator_tag;  ///< 迭代器类别（双向迭代器）。
+    public:
+        using value_type        = std::conditional_t<IsConst, const T, T>; ///< 迭代器指向的值类型。
+        using pointer           = value_type*;                             ///< 指向值的指针类型。
+        using reference         = value_type&;                             ///< 值的引用类型。
+        using difference_type   = std::ptrdiff_t;                          ///< 迭代器差值类型。
+        using iterator_category = std::bidirectional_iterator_tag;         ///< 迭代器类别（双向迭代器）。
 
         using ObjectIterator = std::conditional_t<IsConst,
                                                   JsonObject::const_iterator,
-                                                  JsonObject::iterator>;  ///< 对象迭代器类型。
-        using ArrayIterator  = std::conditional_t<IsConst,
-                                                  JsonArray::const_iterator,
-                                                  JsonArray::iterator>;  ///< 数组迭代器类型。
+                                                  JsonObject::iterator>; ///< 对象迭代器类型。
+        using ArrayIterator = std::conditional_t<IsConst,
+                                                 JsonArray::const_iterator,
+                                                 JsonArray::iterator>; ///< 数组迭代器类型。
 
         /**
          * @brief 构造函数，初始化迭代器。
@@ -989,11 +1006,11 @@ class JsonValue {
             }
             if (m_value->isObject()) {
                 return std::get<ObjectIterator>(m_it) == std::get<ObjectIterator>(other.m_it);
-            } else if (m_value->isArray()) {
-                return std::get<ArrayIterator>(m_it) == std::get<ArrayIterator>(other.m_it);
-            } else {
-                return std::get<size_t>(m_it) == std::get<size_t>(other.m_it);
             }
+            if (m_value->isArray()) {
+                return std::get<ArrayIterator>(m_it) == std::get<ArrayIterator>(other.m_it);
+            }
+            return std::get<size_t>(m_it) == std::get<size_t>(other.m_it);
         }
 
         /**
@@ -1002,7 +1019,7 @@ class JsonValue {
          * @return 如果两个迭代器指向不同位置，返回 true，否则返回 false。
          */
         bool operator!=(const BaseIterator& other) const {
-            return !(this->operator==(other));
+            return !this->operator==(other);
         }
 
         /**
@@ -1010,7 +1027,7 @@ class JsonValue {
          * @return 当前键的字符串。
          * @throws JsonException 如果迭代器不指向对象类型。
          */
-        std::string key() const {
+        [[nodiscard]] std::string key() const {
             if (!m_value->isObject()) {
                 throw JsonException("Not an object iterator");
             }
@@ -1021,14 +1038,14 @@ class JsonValue {
          * @brief 获取当前迭代器的值。
          * @return 当前值的引用。
          */
-        reference value() const {
+        [[nodiscard]] reference value() const {
             return operator*();
         }
 
-      private:
-        std::conditional_t<IsConst, const T*, T*> m_value = nullptr;  ///< 指向的 JSON 值。
+    private:
+        std::conditional_t<IsConst, const T*, T*> m_value = nullptr; ///< 指向的 JSON 值。
         std::variant<ObjectIterator, ArrayIterator, size_t>
-            m_it;  ///< 内部迭代器（对象、数组或基本类型的索引）。
+        m_it; ///< 内部迭代器（对象、数组或基本类型的索引）。
     };
 
     /**
@@ -1047,18 +1064,19 @@ class JsonValue {
      */
     template <typename ForwardIt>
     class BaseReverseIterator {
-      public:
-        using value_type = typename ForwardIt::value_type;  ///< 反向迭代器指向的值类型。
-        using reference       = typename ForwardIt::reference;  ///< 值的引用类型。
-        using pointer         = typename ForwardIt::pointer;    ///< 指向值的指针类型。
-        using difference_type = typename ForwardIt::difference_type;  ///< 迭代器差值类型。
-        using iterator_category = std::bidirectional_iterator_tag;  ///< 迭代器类别（双向迭代器）。
+    public:
+        using value_type        = typename ForwardIt::value_type;      ///< 反向迭代器指向的值类型。
+        using reference         = typename ForwardIt::reference;       ///< 值的引用类型。
+        using pointer           = typename ForwardIt::pointer;         ///< 指向值的指针类型。
+        using difference_type   = typename ForwardIt::difference_type; ///< 迭代器差值类型。
+        using iterator_category = std::bidirectional_iterator_tag;     ///< 迭代器类别（双向迭代器）。
 
         /**
          * @brief 构造函数，初始化反向迭代器。
          * @param it 正向迭代器，用于初始化反向迭代器。
          */
-        explicit BaseReverseIterator(ForwardIt it) : m_it(std::move(it)) {}
+        explicit BaseReverseIterator(ForwardIt it)
+            : m_it(std::move(it)) {}
 
         /**
          * @brief 解引用操作符，返回当前反向迭代器指向的值。
@@ -1139,7 +1157,7 @@ class JsonValue {
          * @return 当前键的字符串。
          * @throws JsonException 如果迭代器不指向对象类型。
          */
-        std::string key() const {
+        [[nodiscard]] std::string key() const {
             auto tmp = m_it;
             return (--tmp).key();
         }
@@ -1148,13 +1166,13 @@ class JsonValue {
          * @brief 获取当前反向迭代器的值。
          * @return 当前值的引用。
          */
-        reference value() const {
+        [[nodiscard]] reference value() const {
             auto tmp = m_it;
             return (--tmp).value();
         }
 
-      private:
-        ForwardIt m_it;  ///< 内部正向迭代器。
+    private:
+        ForwardIt m_it; ///< 内部正向迭代器。
     };
 
     /**
@@ -1167,12 +1185,12 @@ class JsonValue {
      */
     using ConstReverseIterator = BaseReverseIterator<ConstIterator>;
 
-  public:
+public:
     /**
      * @brief 获取 JSON 数据结构的正向迭代器（非 const），指向起始位置。
      * @return Iterator 类型的迭代器，指向 JSON 数据的开头。
      */
-    Iterator begin() {
+    [[nodiscard]] Iterator begin() {
         return {this};
     }
 
@@ -1180,7 +1198,7 @@ class JsonValue {
      * @brief 获取 JSON 数据结构的正向迭代器（非 const），指向结束位置。
      * @return Iterator 类型的迭代器，指向 JSON 数据的末尾。
      */
-    Iterator end() {
+    [[nodiscard]] Iterator end() {
         return {this, true};
     }
 
@@ -1188,7 +1206,7 @@ class JsonValue {
      * @brief 获取 JSON 数据结构的反向迭代器（非 const），指向反向遍历的起始位置（即正向的末尾）。
      * @return ReverseIterator 类型的反向迭代器，指向 JSON 数据的末尾。
      */
-    ReverseIterator rbegin() {
+    [[nodiscard]] ReverseIterator rbegin() {
         return ReverseIterator(end());
     }
 
@@ -1196,7 +1214,7 @@ class JsonValue {
      * @brief 获取 JSON 数据结构的反向迭代器（非 const），指向反向遍历的结束位置（即正向的开头）。
      * @return ReverseIterator 类型的反向迭代器，指向 JSON 数据的开头。
      */
-    ReverseIterator rend() {
+    [[nodiscard]] ReverseIterator rend() {
         return ReverseIterator(begin());
     }
 
@@ -1204,7 +1222,7 @@ class JsonValue {
      * @brief 获取 JSON 数据结构的正向迭代器（const），指向起始位置。
      * @return ConstIterator 类型的迭代器，指向 JSON 数据的开头。
      */
-    ConstIterator begin() const {
+    [[nodiscard]] ConstIterator begin() const {
         return {this};
     }
 
@@ -1212,7 +1230,7 @@ class JsonValue {
      * @brief 获取 JSON 数据结构的正向迭代器（const），指向结束位置。
      * @return ConstIterator 类型的迭代器，指向 JSON 数据的末尾。
      */
-    ConstIterator end() const {
+    [[nodiscard]] ConstIterator end() const {
         return {this, true};
     }
 
@@ -1220,7 +1238,7 @@ class JsonValue {
      * @brief 获取 JSON 数据结构的反向迭代器（const），指向反向遍历的起始位置（即正向的末尾）。
      * @return ConstReverseIterator 类型的反向迭代器，指向 JSON 数据的末尾。
      */
-    ConstReverseIterator rbegin() const {
+    [[nodiscard]] ConstReverseIterator rbegin() const {
         return ConstReverseIterator(end());
     }
 
@@ -1228,27 +1246,26 @@ class JsonValue {
      * @brief 获取 JSON 数据结构的反向迭代器（const），指向反向遍历的结束位置（即正向的开头）。
      * @return ConstReverseIterator 类型的反向迭代器，指向 JSON 数据的开头。
      */
-    ConstReverseIterator rend() const {
+    [[nodiscard]] ConstReverseIterator rend() const {
         return ConstReverseIterator(begin());
     }
 
-  private:
+private:
     /**
      * @brief 释放内部存储的动态内存。
      */
-    void destroyValue() noexcept;
+    void destroyValue() const noexcept;
 
-  private:
-    JsonType m_type;  ///< JSON 数据类型
-    union
-    {
-        bool        boolean;  ///< 布尔值
-        int64_t     iNumber;  ///< 整数值
-        double      dNumber;  ///< 浮点值
-        JsonString* string;   ///< 字符串指针
-        JsonArray*  array;    ///< 数组指针
-        JsonObject* object;   ///< 对象指针
-    } m_value{};              ///< 存储值的联合体
+private:
+    JsonType m_type; ///< JSON 数据类型
+    union {
+        bool        boolean; ///< 布尔值
+        int64_t     iNumber; ///< 整数值
+        double      dNumber; ///< 浮点值
+        JsonString* string;  ///< 字符串指针
+        JsonArray*  array;   ///< 数组指针
+        JsonObject* object;  ///< 对象指针
+    } m_value{};             ///< 存储值的联合体
 };
 
 /**
@@ -1265,9 +1282,9 @@ namespace parser {
      * 定义解析 JSON 时的可选配置项，用于控制扩展功能。
      */
     enum ParserOption {
-        DISABLE_EXTENSION              = 0,      ///< 禁用所有扩展
-        ENABLE_PARSE_X_ESCAPE_SEQUENCE = 1,      ///< 启用 \x 转义序列解析
-        ENABLE_PARSE_0_ESCAPE_SEQUENCE = 1 << 1  ///< 启用 \0 转义序列解析
+        DISABLE_EXTENSION = 0,                  ///< 禁用所有扩展
+        ENABLE_PARSE_X_ESCAPE_SEQUENCE = 1,     ///< 启用 \x 转义序列解析
+        ENABLE_PARSE_0_ESCAPE_SEQUENCE = 1 << 1 ///< 启用 \0 转义序列解析
     };
 
     /**
@@ -1287,7 +1304,7 @@ namespace parser {
      * @exception JsonException 如果序列化失败（如数值无效），抛出异常。
      */
     std::string stringify(const JsonValue& value, int indent = 0);
-}  // namespace parser
+} // namespace parser
 
 // 容器序列化支持
 
@@ -1310,7 +1327,7 @@ void fromJson(const JsonValue& root, std::vector<T>& vec) {
     }
 }
 
-template <typename Map, typename T, typename>
+template <typename Map, typename, typename>
 void fromJson(const JsonValue& root, Map& map) {
     if (!root.isObject()) {
         throw JsonException("Not a Object");
@@ -1366,7 +1383,7 @@ JsonValue toJson(const Map& map) {
 inline JsonValue operator""_json(const char* data, size_t length) {
     return parser::parse({data, length});
 }
-}  // namespace ccjson
+} // namespace ccjson
 
 #endif
 #pragma clang diagnostic pop

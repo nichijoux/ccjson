@@ -243,9 +243,6 @@ std::cout << "\n10.反射注册展示" << std::endl;
 - 操作符：`[]` 用于访问元素，`=` 用于赋值。
 - 方法：`get<T>`、`set`、`push_back`、`toString`、`type`、`isNull` 等。
 - const 迭代器：`begin()` 和 `end()` 用于遍历数组和对象。
-
-### `JsonParser` 类
-
 - `parse`：解析 JSON 字符串，支持自定义选项。
 - `stringify`：将 `JsonValue` 序列化为 JSON 字符串，支持可选缩进。
 

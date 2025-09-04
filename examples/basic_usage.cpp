@@ -1,7 +1,7 @@
 #pragma once
 
 #include "ccjson.h"
-#include "ccjson_reflec.h"
+#include "ccjson_reflect.h"
 #include <fstream>
 #include <iostream>
 
@@ -111,6 +111,11 @@ REFLECT_TYPE_TEMPLATED(((Baby<T, N>), class T, class N), name, hungry)
 
 // 运行所有示例
 void run_examples() {
+    JsonValue toml = {{"name", "Alice"},
+                      {"age", 25},
+                      {"scores", {90, 85, 88}},
+                      {"address", {{"city", "Wonderland"}, {"zip", "12345"}}}};
+
     std::cout << "\n=== 运行 JsonValue 使用示例 ===\n" << '\n';
 
     // 数组索引访问示例

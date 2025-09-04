@@ -7,20 +7,27 @@
 #include <sstream>
 
 namespace ccjson {
-
-JsonValue::JsonValue(const JsonValue& other) : m_type(other.m_type) {
+JsonValue::JsonValue(const JsonValue& other)
+    : m_type(other.m_type) {
     switch (m_type) {
         case JsonType::Null: break;
-        case JsonType::Boolean: m_value.boolean = other.m_value.boolean; break;
-        case JsonType::Integer: m_value.iNumber = other.m_value.iNumber; break;
-        case JsonType::Double: m_value.dNumber = other.m_value.dNumber; break;
-        case JsonType::String: m_value.string = new std::string(*other.m_value.string); break;
-        case JsonType::Array: m_value.array = new JsonArray(*other.m_value.array); break;
-        case JsonType::Object: m_value.object = new JsonObject(*other.m_value.object); break;
+        case JsonType::Boolean: m_value.boolean = other.m_value.boolean;
+            break;
+        case JsonType::Integer: m_value.iNumber = other.m_value.iNumber;
+            break;
+        case JsonType::Double: m_value.dNumber = other.m_value.dNumber;
+            break;
+        case JsonType::String: m_value.string = new std::string(*other.m_value.string);
+            break;
+        case JsonType::Array: m_value.array = new JsonArray(*other.m_value.array);
+            break;
+        case JsonType::Object: m_value.object = new JsonObject(*other.m_value.object);
+            break;
     }
 }
 
-JsonValue::JsonValue(JsonValue&& other) noexcept : m_type(other.m_type) {
+JsonValue::JsonValue(JsonValue&& other) noexcept
+    : m_type(other.m_type) {
     m_value              = other.m_value;
     other.m_type         = JsonType::Null;
     other.m_value.object = nullptr;
@@ -32,12 +39,18 @@ JsonValue& JsonValue::operator=(const JsonValue& other) {
         m_type = other.m_type;
         switch (m_type) {
             case JsonType::Null: break;
-            case JsonType::Boolean: m_value.boolean = other.m_value.boolean; break;
-            case JsonType::Integer: m_value.iNumber = other.m_value.iNumber; break;
-            case JsonType::Double: m_value.dNumber = other.m_value.dNumber; break;
-            case JsonType::String: m_value.string = new std::string(*other.m_value.string); break;
-            case JsonType::Array: m_value.array = new JsonArray(*other.m_value.array); break;
-            case JsonType::Object: m_value.object = new JsonObject(*other.m_value.object); break;
+            case JsonType::Boolean: m_value.boolean = other.m_value.boolean;
+                break;
+            case JsonType::Integer: m_value.iNumber = other.m_value.iNumber;
+                break;
+            case JsonType::Double: m_value.dNumber = other.m_value.dNumber;
+                break;
+            case JsonType::String: m_value.string = new std::string(*other.m_value.string);
+                break;
+            case JsonType::Array: m_value.array = new JsonArray(*other.m_value.array);
+                break;
+            case JsonType::Object: m_value.object = new JsonObject(*other.m_value.object);
+                break;
         }
     }
     return *this;
@@ -142,16 +155,19 @@ JsonValue::operator std::string() const {
     return *m_value.string;
 }
 
-std::string JsonValue::toString(int indent) const {
+std::string JsonValue::toString(const int indent) const {
     return parser::stringify(*this, indent);
 }
 
-void JsonValue::destroyValue() noexcept {
+void JsonValue::destroyValue() const noexcept {
     switch (m_type) {
         // 动态分配的内存
-        case JsonType::String: delete m_value.string; break;
-        case JsonType::Array: delete m_value.array; break;
-        case JsonType::Object: delete m_value.object; break;
+        case JsonType::String: delete m_value.string;
+            break;
+        case JsonType::Array: delete m_value.array;
+            break;
+        case JsonType::Object: delete m_value.object;
+            break;
         default: break;
     }
 }
@@ -253,7 +269,7 @@ static JsonValue parseArray(const std::string_view& json, size_t& position, uint
  */
 static JsonValue parseObject(const std::string_view& json, size_t& position, uint8_t option);
 
-JsonValue parseValue(const std::string_view& json, size_t& position, uint8_t option) {
+JsonValue parseValue(const std::string_view& json, size_t& position, const uint8_t option) {
     // 跳过无用字符
     SKIP_USELESS_CHAR(json, position);
     // 范围检测
@@ -261,8 +277,7 @@ JsonValue parseValue(const std::string_view& json, size_t& position, uint8_t opt
         throw JsonParseException("Unexpected end of input", position);
     }
     // 根据第一个字符判断接来要解析什么
-    char c = json[position];
-    switch (c) {
+    switch (const char c = json[position]) {
         case 'n': return parseNull(json, position);
         case 't':
         case 'f': return parseBoolean(json, position);
@@ -299,7 +314,8 @@ JsonValue parseBoolean(const std::string_view& json, size_t& position) {
     if (json.substr(position, 4) == "true") {
         position += 4;
         return true;
-    } else if (json.substr(position, 5) == "false") {
+    }
+    if (json.substr(position, 5) == "false") {
         position += 5;
         return false;
     }
@@ -308,7 +324,7 @@ JsonValue parseBoolean(const std::string_view& json, size_t& position) {
 
 JsonValue parseNumber(const std::string_view& json, size_t& position) {
     // 解析数字,数字格式为-?(0|[1-9]\d*)(\.\d+)?([eE][+-]?\d+)?
-    size_t start = position;
+    const size_t start = position;
     // 假设是整数，除非发现小数点或指数
     bool isInteger = true;
 
@@ -366,12 +382,12 @@ JsonValue parseNumber(const std::string_view& json, size_t& position) {
             position++;
         }
     }
-    std::string raw(json.substr(start, position - start));
+    const std::string raw(json.substr(start, position - start));
     // 将数值转换为数字
     if (isInteger) {
         int64_t result = 0;
-        auto [ptr, ec] = std::from_chars(raw.data(), raw.data() + raw.size(), result);
-        if (ec != std::errc() || ptr != raw.data() + raw.size()) {
+        if (auto [ptr, ec] = std::from_chars(raw.data(), raw.data() + raw.size(), result);
+            ec != std::errc() || ptr != raw.data() + raw.size()) {
             if (ec == std::errc::result_out_of_range) {
                 goto parseDouble;
             }
@@ -379,26 +395,25 @@ JsonValue parseNumber(const std::string_view& json, size_t& position) {
                                      start);
         }
         return result;
-    } else {
-    parseDouble:
-        double result  = 0;
-        auto [ptr, ec] = std::from_chars(raw.data(), raw.data() + raw.size(), result);
-        if (ec != std::errc() || ptr != raw.data() + raw.size()) {
-            if (ec == std::errc::result_out_of_range) {
-                throw JsonParseException(
-                    "Result out of range: The parsed value is too large or too small.", start);
-            }
-            throw JsonParseException("Invalid argument: The input is not a valid float number.",
-                                     start);
-        }
-        return result;
     }
+parseDouble:
+    double result = 0;
+    if (auto [ptr, ec] = std::from_chars(raw.data(), raw.data() + raw.size(), result);
+        ec != std::errc() || ptr != raw.data() + raw.size()) {
+        if (ec == std::errc::result_out_of_range) {
+            throw JsonParseException(
+                "Result out of range: The parsed value is too large or too small.", start);
+        }
+        throw JsonParseException("Invalid argument: The input is not a valid float number.",
+                                 start);
+    }
+    return result;
 }
 
 std::pair<char32_t, bool> hexToChar32t(const std::string_view& hex) {
     char32_t result = 0;
-    for (char c : hex) {
-        result = (result << 4);
+    for (const char c : hex) {
+        result = result << 4;
         if ('0' <= c && c <= '9') {
             result += c - '0';
         } else if ('A' <= c && c <= 'F') {
@@ -412,7 +427,7 @@ std::pair<char32_t, bool> hexToChar32t(const std::string_view& hex) {
     return {result, true};
 }
 
-std::string parseUnicodeString(char32_t codePoint, size_t position) {
+std::string parseUnicodeString(const char32_t codePoint, const size_t position) {
     std::string result;
     // 根据 Unicode 码点范围，按 UTF-8 规则分段编码：
     if (codePoint <= 0x007F) {
@@ -450,7 +465,8 @@ JsonValue parseString(const std::string_view& json, size_t& position, uint8_t op
         char c = json[position++];
         if (c == '"') {
             return result;
-        } else if (c == '\\') {
+        }
+        if (c == '\\') {
             // 如果c为\,说明遇到了转移字符
             if (position >= json.size()) {
                 throw JsonParseException("Unexpected end of string", position);
@@ -458,14 +474,22 @@ JsonValue parseString(const std::string_view& json, size_t& position, uint8_t op
             // 转义字符后的字符
             c = json[position++];
             switch (c) {
-                case '"': result += '"'; break;
-                case '\\': result += '\\'; break;
-                case '/': result += '/'; break;
-                case 'b': result += '\b'; break;
-                case 'f': result += '\f'; break;
-                case 'n': result += '\n'; break;
-                case 'r': result += '\r'; break;
-                case 't': result += '\t'; break;
+                case '"': result += '"';
+                    break;
+                case '\\': result += '\\';
+                    break;
+                case '/': result += '/';
+                    break;
+                case 'b': result += '\b';
+                    break;
+                case 'f': result += '\f';
+                    break;
+                case 'n': result += '\n';
+                    break;
+                case 'r': result += '\r';
+                    break;
+                case 't': result += '\t';
+                    break;
                 case 'u': {
                     // unicode字符\u后必须跟随4个字符（代表码点）
                     if (position + 4 >= json.size()) {
@@ -524,7 +548,7 @@ JsonValue parseString(const std::string_view& json, size_t& position, uint8_t op
                             // 检查是否还有下一个 \x
                             if (position + 3 < json.size() && json[position] == '\\' &&
                                 json[position + 1] == 'x') {
-                                position += 2;  // 跳过 \x
+                                position += 2; // 跳过 \x
                             } else {
                                 break;
                             }
@@ -601,7 +625,7 @@ JsonValue parseString(const std::string_view& json, size_t& position, uint8_t op
     throw JsonParseException("Unexpected end of string", position);
 }
 
-JsonValue parseArray(const std::string_view& json, size_t& position, uint8_t option) {
+JsonValue parseArray(const std::string_view& json, size_t& position, const uint8_t option) {
     // 当前字符一定为[
     JsonArray result;
     // 跳过[
@@ -641,7 +665,7 @@ JsonValue parseArray(const std::string_view& json, size_t& position, uint8_t opt
     throw JsonParseException("Unexpected end of Array", position);
 }
 
-JsonValue parseObject(const std::string_view& json, size_t& position, uint8_t option) {
+JsonValue parseObject(const std::string_view& json, size_t& position, const uint8_t option) {
     // 当前字符一定为{
     JsonObject object;
     position++;
@@ -692,7 +716,7 @@ JsonValue parseObject(const std::string_view& json, size_t& position, uint8_t op
 }
 
 namespace parser {
-    JsonValue parse(std::string_view json, ParserOption option) {
+    JsonValue parse(const std::string_view json, const ParserOption option) {
         size_t    position = 0;
         JsonValue result   = parseValue(json, position, option);
         SKIP_USELESS_CHAR(json, position);
@@ -702,7 +726,7 @@ namespace parser {
         }
         return result;
     }
-}  // namespace parser
+} // namespace parser
 
 #undef SKIP_USELESS_CHAR
 
@@ -719,14 +743,14 @@ static void stringifyValue(const JsonValue& value, std::ostringstream& oss, int 
  * @brief 序列化空值到输出流。
  * @param oss 输出字符串流。
  */
-inline static void stringifyNull(std::ostringstream& oss);
+static void stringifyNull(std::ostringstream& oss);
 
 /**
  * @brief 序列化布尔值到输出流。
  * @param value JSON 值（布尔值）
  * @param oss 输出字符串流。
  */
-inline static void stringifyBoolean(const JsonValue& value, std::ostringstream& oss);
+static void stringifyBoolean(const JsonValue& value, std::ostringstream& oss);
 
 /**
  * @brief 序列化整数值到输出流。
@@ -734,7 +758,7 @@ inline static void stringifyBoolean(const JsonValue& value, std::ostringstream& 
  * @param oss 输出字符串流。
  * @exception JsonException 如果数值无效（如无穷大或 NaN），抛出异常。
  */
-inline static void stringifyInteger(const JsonValue& value, std::ostringstream& oss);
+static void stringifyInteger(const JsonValue& value, std::ostringstream& oss);
 
 /**
  * @brief 序列化浮点数值到输出流。
@@ -742,7 +766,7 @@ inline static void stringifyInteger(const JsonValue& value, std::ostringstream& 
  * @param oss 输出字符串流。
  * @exception JsonException 如果数值无效（如无穷大或 NaN），抛出异常。
  */
-inline static void stringifyDouble(const JsonValue& value, std::ostringstream& oss);
+static void stringifyDouble(const JsonValue& value, std::ostringstream& oss);
 
 /**
  * @brief 序列化字符串到输出流（处理转义字符）
@@ -769,7 +793,10 @@ static void stringifyArray(const JsonValue& value, std::ostringstream& oss, int 
  */
 static void stringifyObject(const JsonValue& value, std::ostringstream& oss, int indent, int level);
 
-void stringifyValue(const JsonValue& value, std::ostringstream& oss, int indent, int level) {
+void stringifyValue(const JsonValue&    value,
+                    std::ostringstream& oss,
+                    const int           indent,
+                    const int           level) {
     // 根据类型调用不同的stringify
     switch (value.type()) {
         case JsonType::Null: return stringifyNull(oss);
@@ -795,18 +822,16 @@ void stringifyInteger(const JsonValue& value, std::ostringstream& oss) {
 }
 
 void stringifyDouble(const JsonValue& value, std::ostringstream& oss) {
-    auto num = value.get<double>();
-    if (std::isfinite(num)) {
+    if (auto num = value.get<double>(); std::isfinite(num)) {
         std::ostringstream vss;
         // 确保使用点号作为小数点
         vss.imbue(std::locale::classic());
         // 检查是否为整数值但需要表示为浮点数
         bool isIntegerValue =
-            (num == std::floor(num)) && (std::abs(num) < 1e14);  // 避免大整数精度问题
-        const double absValue = std::abs(num);
+            num == std::floor(num) && std::abs(num) < 1e14; // 避免大整数精度问题
         // 决定使用常规表示法还是科学计数法
-        bool useScientific = (absValue >= 1e6) || (absValue > 0 && absValue < 1e-4);
-        if (useScientific) {
+        if (const double absValue = std::abs(num);
+            absValue >= 1e6 || (absValue > 0 && absValue < 1e-4)) {
             // 科学计数法表示 - 先获取原始科学计数法字符串
             vss << std::scientific << std::setprecision(15) << num;
             std::string str = vss.str();
@@ -823,8 +848,8 @@ void stringifyDouble(const JsonValue& value, std::ostringstream& oss) {
             // 处理尾数部分
 
             // 移除尾数部分无意义的零
-            size_t lastNonZero = mantissa.find_last_not_of('0');
-            if (lastNonZero != std::string::npos) {
+            if (size_t lastNonZero = mantissa.find_last_not_of('0');
+                lastNonZero != std::string::npos) {
                 if (mantissa[lastNonZero] == '.') {
                     mantissa.erase(lastNonZero);
                 }
@@ -839,40 +864,50 @@ void stringifyDouble(const JsonValue& value, std::ostringstream& oss) {
 
             oss << result.str();
             return;
-        } else if (isIntegerValue) {
+        }
+        if (isIntegerValue) {
             // 对于整数值的浮点数，强制添加 .0
             vss << std::fixed << std::setprecision(1) << num;
             oss << vss.str();
             return;
-        } else {
-            // 常规表示法
-            vss << std::setprecision(std::numeric_limits<double>::max_digits10) << num;
-            oss << vss.str();
-            return;
         }
-    } else {
-        throw JsonException("Cannot stringify infinite or NaN number");
+        // 常规表示法
+        vss << std::setprecision(std::numeric_limits<double>::max_digits10) << num;
+        oss << vss.str();
+        return;
     }
+    throw JsonException("Cannot stringify infinite or NaN number");
 }
 
 void stringifyString(const std::string& value, std::ostringstream& oss) {
     oss << '"';
-    for (char c : value) {
+    for (const char c : value) {
         switch (c) {
-            case '"': oss << "\\\""; break;
-            case '\\': oss << "\\\\"; break;
-            case '\b': oss << "\\b"; break;
-            case '\f': oss << "\\f"; break;
-            case '\n': oss << "\\n"; break;  // 正确转义 \n
-            case '\r': oss << "\\r"; break;  // 正确转义 \r
-            case '\t': oss << "\\t"; break;
-            default: oss << c; break;
+            case '"': oss << "\\\"";
+                break;
+            case '\\': oss << "\\\\";
+                break;
+            case '\b': oss << "\\b";
+                break;
+            case '\f': oss << "\\f";
+                break;
+            case '\n': oss << "\\n";
+                break; // 正确转义 \n
+            case '\r': oss << "\\r";
+                break; // 正确转义 \r
+            case '\t': oss << "\\t";
+                break;
+            default: oss << c;
+                break;
         }
     }
     oss << '"';
 }
 
-void stringifyArray(const JsonValue& value, std::ostringstream& oss, int indent, int level) {
+void stringifyArray(const JsonValue&    value,
+                    std::ostringstream& oss,
+                    const int           indent,
+                    const int           level) {
     const auto& array = value.asArray();
     if (array.empty()) {
         oss << "[]";
@@ -895,7 +930,10 @@ void stringifyArray(const JsonValue& value, std::ostringstream& oss, int indent,
     oss << ']';
 }
 
-void stringifyObject(const JsonValue& value, std::ostringstream& oss, int indent, int level) {
+void stringifyObject(const JsonValue&    value,
+                     std::ostringstream& oss,
+                     const int           indent,
+                     const int           level) {
     const auto& object = value.asObject();
     if (object.empty()) {
         oss << "{}";
@@ -923,12 +961,11 @@ void stringifyObject(const JsonValue& value, std::ostringstream& oss, int indent
 }
 
 namespace parser {
-    std::string stringify(const JsonValue& value, int indent) {
+    std::string stringify(const JsonValue& value, const int indent) {
         std::ostringstream oss;
         stringifyValue(value, oss, indent, 0);
         return oss.str();
     }
-}  // namespace parser
-
-}  // namespace ccjson
+} // namespace parser
+} // namespace ccjson
 #pragma clang diagnostic pop

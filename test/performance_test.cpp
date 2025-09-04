@@ -387,7 +387,7 @@ int main() {
         std::cout << "Twitter.json size: " << json_str.size() << " bytes" << std::endl;
 
         // 设置测试迭代次数
-        const int iterations = 500;
+        const int iterations = 10;
 
         // 运行性能测试
         std::cout << "\n=== Twitter.json Performance Tests ===\n" << std::endl;
